@@ -1,4 +1,4 @@
-# Flashy · ESP32 固件烧录工具
+# Flashy · ESP32 固件在线烧录工具
 
 [![CI](https://github.com/shenjingnan/flashy/actions/workflows/ci.yml/badge.svg)](https://github.com/shenjingnan/flashy/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
