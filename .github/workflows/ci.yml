@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
+
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v6
+
+      - name: 设置 pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.30.3
+
+      - name: 设置 Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm run typecheck
+
+      - name: 代码检查
+        run: pnpm run lint
+
+      - name: 构建
+        run: pnpm run build
+
+      - name: 测试
+        run: pnpm run test
+
+      - name: 覆盖率报告
+        run: pnpm run test:coverage
+        if: matrix.node-version == 22
+
+      - name: 上传覆盖率到 Codecov
+        uses: codecov/codecov-action@v6
+        if: matrix.node-version == 22
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false

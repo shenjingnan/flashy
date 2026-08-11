@@ -1,0 +1,84 @@
+{
+  "name": "ai-typescript-starter",
+  "version": "0.4.5",
+  "description": "AI 原生的 TypeScript 启动模板，专为 AI 辅助开发时代打造",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm run typecheck && pnpm run lint",
+    "check:fix": "pnpm run typecheck && pnpm run lint:fix && pnpm run format",
+    "spellcheck": "cspell \"**/*.ts\" \"**/*.md\"",
+    "prepare": "husky",
+    "release": "release-it",
+    "release:beta": "release-it --preRelease=beta --ci",
+    "release:dry": "release-it --dry-run --ci",
+    "release:patch": "release-it patch --ci",
+    "release:minor": "release-it minor --ci",
+    "release:major": "release-it major --ci"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.30.3",
+  "keywords": [
+    "typescript",
+    "ai",
+    "starter",
+    "template",
+    "vitest",
+    "biome",
+    "tsdown"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shenjingnan/ai-typescript-starter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shenjingnan/ai-typescript-starter/issues"
+  },
+  "homepage": "https://github.com/shenjingnan/ai-typescript-starter#readme",
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.9",
+    "@release-it/conventional-changelog": "^11.0.0",
+    "@types/node": "^25.5.0",
+    "@vitest/coverage-v8": "^3.2.0",
+    "cspell": "^10.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "release-it": "^19.2.4",
+    "tsdown": "^0.21.7",
+    "typescript": "^6.0.2",
+    "vitest": "^3.2.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "basic-ftp": ">=5.3.0",
+      "undici": ">=6.24.0"
+    }
+  }
+}

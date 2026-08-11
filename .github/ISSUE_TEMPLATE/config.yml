@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 文档
+    url: https://github.com/shenjingnan/ai-typescript-starter#readme
+    about: 查看文档了解常见问题
+  - name: 💬 讨论
+    url: https://github.com/shenjingnan/ai-typescript-starter/discussions
+    about: 与社区交流问题和想法

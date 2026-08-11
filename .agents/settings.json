@@ -1,0 +1,52 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr:*)",
+      "Bash(gh api:*)",
+      "Bash(gh repo view:*)",
+      "Bash(git fetch:*)",
+      "Bash(git symbolic-ref:*)",
+      "Bash(git --no-pager show:*)",
+      "Bash(git --no-pager log:*)",
+      "Bash(git show:*)",
+      "Bash(git log:*)",
+      "Bash(git --no-pager diff:*)",
+      "Bash(git --no-pager status:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm build)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm lint:fix)",
+      "Bash(pnpm test)",
+      "Bash(pnpm format)",
+      "Bash(pnpm audit --audit-level moderate)",
+      "Bash(node:*)",
+      "Bash(sed:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(xargs sed:*)",
+      "Bash(xargs:*)",
+      "Bash(nr:*)",
+      "Bash(cat:*)",
+      "Bash(jq:*)",
+      "Bash(echo:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "WebFetch",
+      "WebSearch",
+      "mcp__web-reader__webReader",
+      "mcp__zread__read_file",
+      "Bash(pnpm spellcheck)",
+      "Bash(pnpm typecheck)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  }
+}
