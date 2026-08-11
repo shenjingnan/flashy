@@ -583,6 +583,26 @@ input[type="file"]::file-selector-button {
   color: var(--text-dim);
 }
 
+/* ---- 关注引导 ---- */
+.follow-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.follow-modal-body p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.follow-modal-body .btn-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* ---- 响应式 ---- */
 @media (max-width: 760px) {
   .app-body {

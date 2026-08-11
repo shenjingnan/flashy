@@ -124,6 +124,26 @@
       </div>
     </div>
 
+    <div id="follow-modal" class="builtin-modal">
+      <div class="builtin-modal-box">
+        <div class="builtin-modal-header">
+          <span>求关注</span>
+          <button id="follow-close" type="button" class="btn btn-tiny" aria-label="关闭">✕</button>
+        </div>
+        <div class="follow-modal-body">
+          <p>
+            使用烧录功能前，请先关注 UP 主
+            <strong id="follow-author-name">闪电蘑菇</strong>。
+            关注后返回本页，再点击「开始烧录」即可继续。
+          </p>
+          <div class="btn-row">
+            <button id="follow-go" type="button" class="btn btn-primary">去关注（打开主页）</button>
+            <button id="follow-later" type="button" class="btn btn-ghost">稍后再说</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
