@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BUILTIN_FIRMWARES } from '../core/builtinFirmwares';
 
 const html = readFileSync(resolve('index.html'), 'utf-8');
 
@@ -107,5 +108,49 @@ describe('main.ts 冒烟测试', () => {
       address.dispatchEvent(new Event('input', { bubbles: true }));
       expect(address.classList.contains('invalid')).toBe(false);
     }
+  });
+
+  it('should open the builtin modal and render the firmware list', async () => {
+    await import('../main');
+    const modal = document.getElementById('builtin-modal') as HTMLElement | null;
+    const btn = document.getElementById('builtin-btn') as HTMLButtonElement | null;
+    btn?.click();
+    expect(modal?.classList.contains('open')).toBe(true);
+    const items = modal?.querySelectorAll('.builtin-item') ?? [];
+    expect(items.length).toBe(BUILTIN_FIRMWARES.length);
+  });
+
+  it('should close the builtin modal via the close button', async () => {
+    await import('../main');
+    const modal = document.getElementById('builtin-modal') as HTMLElement | null;
+    document.getElementById('builtin-btn')?.click();
+    document.getElementById('builtin-close')?.click();
+    expect(modal?.classList.contains('open')).toBe(false);
+  });
+
+  it('should open the file picker when the local firmware button is clicked', async () => {
+    await import('../main');
+    const fileInput = document.getElementById('file-input') as HTMLInputElement | null;
+    const clickSpy = vi.spyOn(fileInput as HTMLInputElement, 'click');
+    document.getElementById('file-btn')?.click();
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it('should select a builtin firmware, set address 0x0 and clear the file input', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(new Uint8Array([0xde, 0xad, 0xbe, 0xef]).buffer)))
+    );
+    await import('../main');
+    const fileInput = document.getElementById('file-input') as HTMLInputElement | null;
+    const selectBtn = document.querySelector<HTMLButtonElement>('.builtin-item .btn-tiny');
+    selectBtn?.click();
+    await vi.waitFor(() => {
+      expect(document.getElementById('file-info')?.textContent).toContain('4 B');
+    });
+    expect(document.getElementById('file-info')?.textContent).toContain('小智AI面包板');
+    expect(document.getElementById('file-info')?.classList.contains('selected')).toBe(true);
+    expect((document.getElementById('address-input') as HTMLInputElement).value).toBe('0x0');
+    expect(fileInput?.value).toBe('');
   });
 });

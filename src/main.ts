@@ -1,4 +1,4 @@
-import { isValidAddress, parseAddress } from './core/address';
+import { formatAddress, isValidAddress, parseAddress } from './core/address';
 import {
   ASK_AI_MAX_CHARS,
   ASK_AI_PROVIDERS,
@@ -14,6 +14,11 @@ import {
   DEFAULT_CONSOLE_BAUD,
   parseBaudRate,
 } from './core/baudrates';
+import {
+  BUILTIN_FIRMWARES,
+  type BuiltinFirmware,
+  loadBuiltinFirmware,
+} from './core/builtinFirmwares';
 import { parseEspIdfLevel } from './core/espIdfLog';
 import { createLogBuffer, formatBytes, formatLogEntry } from './core/logBuffer';
 import { selectionTextInside } from './core/logSelection';
@@ -32,7 +37,12 @@ interface Elements {
   monitorBtn: HTMLButtonElement | null;
   deviceInfo: HTMLElement | null;
   fileInput: HTMLInputElement | null;
+  fileBtn: HTMLButtonElement | null;
   fileInfo: HTMLElement | null;
+  builtinBtn: HTMLButtonElement | null;
+  builtinModal: HTMLElement | null;
+  builtinClose: HTMLButtonElement | null;
+  builtinList: HTMLUListElement | null;
   baudSelect: HTMLSelectElement | null;
   addressInput: HTMLInputElement | null;
   flashBtn: HTMLButtonElement | null;
@@ -65,7 +75,12 @@ function loadElements(): Elements {
     monitorBtn: byId('monitor-btn') as HTMLButtonElement | null,
     deviceInfo: byId('device-info'),
     fileInput: byId('file-input') as HTMLInputElement | null,
+    fileBtn: byId('file-btn') as HTMLButtonElement | null,
     fileInfo: byId('file-info'),
+    builtinBtn: byId('builtin-btn') as HTMLButtonElement | null,
+    builtinModal: byId('builtin-modal'),
+    builtinClose: byId('builtin-close') as HTMLButtonElement | null,
+    builtinList: byId('builtin-list') as HTMLUListElement | null,
     baudSelect: byId('baud-select') as HTMLSelectElement | null,
     addressInput: byId('address-input') as HTMLInputElement | null,
     flashBtn: byId('flash-btn') as HTMLButtonElement | null,
@@ -102,6 +117,8 @@ let service: FlashService | null = null;
 let needsReconnect = false;
 /** 控制台波特率（固件运行时打印日志的波特率，独立于烧录波特率）。 */
 let consoleBaud = DEFAULT_CONSOLE_BAUD;
+/** 内置固件正在加载时为 true，防止并发加载相互覆盖。 */
+let firmwareLoading = false;
 
 if (el.version !== null) {
   el.version.textContent = `v${__APP_VERSION__}`;
@@ -457,29 +474,133 @@ function renderUi(): void {
 
 machine.subscribe(renderUi);
 
+// ---- 内置固件快捷选择 ----
+/** 渲染内置固件列表（数据驱动，从 BUILTIN_FIRMWARES 生成）。 */
+function renderBuiltinList(): void {
+  if (el.builtinList === null) {
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const firmware of BUILTIN_FIRMWARES) {
+    const item = document.createElement('li');
+    item.className = 'builtin-item';
+
+    const meta = document.createElement('div');
+    meta.className = 'builtin-meta';
+    const name = document.createElement('span');
+    name.className = 'builtin-name';
+    name.textContent = firmware.name;
+    meta.appendChild(name);
+    if (firmware.description !== undefined) {
+      const desc = document.createElement('span');
+      desc.className = 'builtin-desc';
+      desc.textContent = firmware.description;
+      meta.appendChild(desc);
+    }
+
+    const selectBtn = document.createElement('button');
+    selectBtn.type = 'button';
+    selectBtn.className = 'btn btn-tiny';
+    selectBtn.textContent = '选择';
+    selectBtn.addEventListener('click', () => {
+      void selectBuiltinFirmware(firmware);
+    });
+
+    item.append(meta, selectBtn);
+    fragment.appendChild(item);
+  }
+  el.builtinList.replaceChildren(fragment);
+}
+
+/** 选择内置固件：关闭弹窗 → 按需加载 → 写入状态并联动地址。 */
+async function selectBuiltinFirmware(firmware: BuiltinFirmware): Promise<void> {
+  if (firmwareLoading) {
+    return;
+  }
+  firmwareLoading = true;
+  closeBuiltinModal();
+  if (el.builtinBtn !== null) {
+    el.builtinBtn.disabled = true;
+  }
+  setFirmwareInfo(`正在加载内置固件 ${firmware.name}…`, false);
+  try {
+    const data = await loadBuiltinFirmware(firmware.url);
+    firmwareData = data;
+    if (el.fileInput !== null) {
+      el.fileInput.value = ''; // 互斥：清空本地文件残留（不触发 change）
+    }
+    if (el.addressInput !== null) {
+      el.addressInput.value = formatAddress(firmware.defaultAddress);
+    }
+    validateAddressInput();
+    setFirmwareInfo(`${firmware.name}（${formatBytes(data.byteLength)}）`, true);
+    logBuffer.push(
+      'info',
+      `已选择内置固件: ${firmware.name}（${formatBytes(data.byteLength)}），烧录地址 ${formatAddress(firmware.defaultAddress)}`
+    );
+  } catch (err) {
+    firmwareData = null;
+    setFirmwareInfo('内置固件加载失败，请重试', false);
+    logBuffer.push(
+      'error',
+      `加载内置固件失败: ${err instanceof Error ? err.message : String(err)}`
+    );
+  } finally {
+    firmwareLoading = false;
+    if (el.builtinBtn !== null) {
+      el.builtinBtn.disabled = false;
+    }
+    renderUi();
+  }
+}
+
+/** 设置固件信息展示文本，并标记是否已选中（选中时高亮）。 */
+function setFirmwareInfo(text: string, selected: boolean): void {
+  if (el.fileInfo !== null) {
+    el.fileInfo.textContent = text;
+    el.fileInfo.classList.toggle('selected', selected);
+  }
+}
+
+function openBuiltinModal(): void {
+  el.builtinModal?.classList.add('open');
+}
+
+function closeBuiltinModal(): void {
+  el.builtinModal?.classList.remove('open');
+}
+
+el.builtinBtn?.addEventListener('click', openBuiltinModal);
+el.builtinClose?.addEventListener('click', closeBuiltinModal);
+el.builtinModal?.addEventListener('click', (event) => {
+  if (event.target === el.builtinModal) {
+    closeBuiltinModal(); // 点击遮罩层关闭
+  }
+});
+
+renderBuiltinList();
+
 // ---- 文件选择 ----
+el.fileBtn?.addEventListener('click', () => {
+  el.fileInput?.click(); // 用户手势内同步触发文件选择器
+});
+
 el.fileInput?.addEventListener('change', async () => {
   const file = el.fileInput?.files?.[0];
   if (file === undefined) {
     firmwareData = null;
-    if (el.fileInfo !== null) {
-      el.fileInfo.textContent = '未选择固件文件';
-    }
+    setFirmwareInfo('未选择固件文件', false);
     renderUi();
     return;
   }
   try {
     const buffer = await file.arrayBuffer();
     firmwareData = new Uint8Array(buffer);
-    if (el.fileInfo !== null) {
-      el.fileInfo.textContent = `${file.name}（${formatBytes(buffer.byteLength)}）`;
-    }
+    setFirmwareInfo(`${file.name}（${formatBytes(buffer.byteLength)}）`, true);
     logBuffer.push('info', `已选择固件文件: ${file.name}（${formatBytes(buffer.byteLength)}）`);
   } catch (err) {
     firmwareData = null;
-    if (el.fileInfo !== null) {
-      el.fileInfo.textContent = '读取文件失败';
-    }
+    setFirmwareInfo('读取文件失败', false);
     logBuffer.push(
       'error',
       `读取固件文件失败: ${err instanceof Error ? err.message : String(err)}`
