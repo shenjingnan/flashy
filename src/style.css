@@ -47,7 +47,7 @@ body {
 
 .app-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
 }
 
@@ -55,6 +55,15 @@ body {
   margin: 0;
   font-size: 20px;
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-title .app-logo {
+  width: 24px;
+  height: 24px;
+  display: block;
 }
 
 .app-subtitle {
@@ -363,6 +372,30 @@ input[type="file"]::file-selector-button {
   color: #fff;
 }
 
+/* 选中日志后浮出的操作工具栏（fixed 定位到鼠标附近，accent 底色与暗色日志区明显区分） */
+.selection-toolbar {
+  position: fixed;
+  z-index: 30;
+  padding: 4px;
+  background: var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.selection-toolbar[hidden] {
+  display: none;
+}
+
+.selection-toolbar .btn-tiny {
+  color: #fff;
+  border-color: transparent;
+}
+
+.selection-toolbar .btn-tiny:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
 .log-view {
   flex: 1;
   margin: 0;
@@ -398,6 +431,22 @@ input[type="file"]::file-selector-button {
 }
 
 .log-line.log-info {
+  color: var(--text);
+}
+
+.log-line.log-system {
+  color: var(--accent);
+}
+
+.log-line.log-success {
+  color: var(--success);
+}
+
+.log-line.log-flash {
+  color: var(--text);
+}
+
+.log-line.log-device {
   color: var(--text);
 }
 

@@ -2,8 +2,14 @@
  * 「问 AI」功能：将日志 + 设备信息组装成 prompt，并生成跳转到对应 AI 的 URL。
  */
 
-/** 传给 AI 的日志截取上限（URL query 过长有风险，保留最近部分对排障最有价值）。 */
-export const ASK_AI_MAX_CHARS = 8000;
+/**
+ * 传给 AI 的日志截取上限。
+ *
+ * 问 AI 通过 URL query（`?q=`）传参，服务器对 URL 长度限制仅 KB 级（414），
+ * 且 encodeURIComponent 对中文膨胀约 9 倍，因此不宜过大。
+ * 3000 字符在 ASCII 设备日志场景安全；大段中文内容由「选中日志」功能规避。
+ */
+export const ASK_AI_MAX_CHARS = 3000;
 
 /** AI 服务商配置。 */
 export interface AskAiProvider {

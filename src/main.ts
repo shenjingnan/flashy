@@ -14,7 +14,9 @@ import {
   DEFAULT_CONSOLE_BAUD,
   parseBaudRate,
 } from './core/baudrates';
+import { parseEspIdfLevel } from './core/espIdfLog';
 import { createLogBuffer, formatBytes, formatLogEntry } from './core/logBuffer';
+import { selectionTextInside } from './core/logSelection';
 import { createFlashStateMachine } from './core/stateMachine';
 import type { BaudRate, DetectResult } from './core/types';
 import type { FlashService } from './serial/flashService';
@@ -43,6 +45,9 @@ interface Elements {
   clearLogBtn: HTMLButtonElement | null;
   logView: HTMLPreElement | null;
   consoleBaudSelect: HTMLSelectElement | null;
+  selectionToolbar: HTMLElement | null;
+  selectionAskBtn: HTMLButtonElement | null;
+  selectionAskMenu: HTMLElement | null;
   copyLogBtn: HTMLButtonElement | null;
   askAiLogBtn: HTMLButtonElement | null;
   askAiLogMenu: HTMLElement | null;
@@ -73,6 +78,9 @@ function loadElements(): Elements {
     clearLogBtn: byId('clear-log-btn') as HTMLButtonElement | null,
     logView: byId('log-view') as HTMLPreElement | null,
     consoleBaudSelect: byId('console-baud') as HTMLSelectElement | null,
+    selectionToolbar: byId('selection-toolbar'),
+    selectionAskBtn: byId('selection-ask-btn') as HTMLButtonElement | null,
+    selectionAskMenu: byId('selection-ask-menu'),
     copyLogBtn: byId('copy-log-btn') as HTMLButtonElement | null,
     askAiLogBtn: byId('ask-ai-log-btn') as HTMLButtonElement | null,
     askAiLogMenu: byId('ask-ai-log-menu'),
@@ -149,7 +157,7 @@ function renderLogView(): void {
   for (const entry of lines) {
     const node = document.createElement('div');
     node.textContent = formatLogEntry(entry);
-    node.className = `log-line log-${entry.level}`;
+    node.className = `log-line log-${entry.level} log-${entry.type}`;
     fragment.appendChild(node);
   }
   el.logView.replaceChildren(fragment);
@@ -182,7 +190,7 @@ function appendConsoleLine(text: string): void {
   for (const part of parts) {
     const trimmed = part.replace(/\r$/, '').trimEnd();
     if (trimmed !== '') {
-      logBuffer.push('info', trimmed);
+      logBuffer.push(parseEspIdfLevel(trimmed), trimmed, 'device');
     }
   }
 }
@@ -263,6 +271,95 @@ document.addEventListener('click', () => {
     el.askAiLogMenu.hidden = true;
   }
 });
+
+// ---- 选中日志工具栏（问 AI）----
+function hideSelectionToolbar(): void {
+  if (el.selectionToolbar !== null) {
+    el.selectionToolbar.hidden = true;
+  }
+  if (el.selectionAskMenu !== null) {
+    el.selectionAskMenu.hidden = true;
+  }
+}
+
+/** 最近一次鼠标位置（用于把工具栏定位到鼠标附近；键盘选择时置空回退到选区矩形）。 */
+let pointerPos: { x: number; y: number } | null = null;
+/** 工具栏近似宽度，用于避免超出视口右边界。 */
+const SELECTION_TOOLBAR_EST_WIDTH = 150;
+
+function updateSelectionToolbar(): void {
+  const text = selectionTextInside(window.getSelection(), el.logView);
+  if (text === '' || el.selectionToolbar === null) {
+    hideSelectionToolbar();
+    return;
+  }
+  const range = window.getSelection()?.getRangeAt(0);
+  const rect = range?.getBoundingClientRect();
+  if (pointerPos !== null) {
+    // 贴近鼠标：右下偏移，且不超出视口
+    const left = Math.min(
+      pointerPos.x + 12,
+      Math.max(0, window.innerWidth - SELECTION_TOOLBAR_EST_WIDTH)
+    );
+    const top = Math.min(pointerPos.y + 12, window.innerHeight - 44);
+    el.selectionToolbar.style.left = `${left}px`;
+    el.selectionToolbar.style.top = `${top}px`;
+  } else {
+    // 键盘选择：无鼠标位置，浮在选区上方；rect 取不到时兜底左上角（测试友好）
+    el.selectionToolbar.style.left = `${rect?.left ?? 0}px`;
+    el.selectionToolbar.style.top = `${Math.max(4, (rect?.top ?? 0) - 48)}px`;
+  }
+  el.selectionToolbar.hidden = false;
+}
+
+function setupSelectionToolbar(): void {
+  document.addEventListener('selectionchange', updateSelectionToolbar);
+  // 记录鼠标位置并在松开时刷新工具栏位置（贴近鼠标）；点击工具栏自身不改变位置
+  document.addEventListener('mouseup', (event) => {
+    const target = event.target as Node | null;
+    if (el.selectionToolbar?.contains(target)) {
+      return;
+    }
+    pointerPos = { x: event.clientX, y: event.clientY };
+    updateSelectionToolbar();
+  });
+  // 键盘方向键扩展选区时没有鼠标位置，回退到选区矩形定位
+  document.addEventListener('keyup', () => {
+    pointerPos = null;
+    updateSelectionToolbar();
+  });
+  el.selectionAskBtn?.addEventListener('mousedown', (event) => {
+    event.preventDefault(); // 避免点击按钮时干扰当前选区
+  });
+  el.selectionAskBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (el.selectionAskMenu !== null) {
+      el.selectionAskMenu.hidden = !el.selectionAskMenu.hidden;
+    }
+  });
+  el.selectionAskMenu?.addEventListener('click', (event) => {
+    const target = (event.target as HTMLElement).closest('button[data-ai]') as HTMLElement | null;
+    if (target === null) {
+      return;
+    }
+    const provider = ASK_AI_PROVIDERS.find((p) => p.id === target.dataset.ai);
+    if (provider === undefined) {
+      return;
+    }
+    const selected = selectionTextInside(window.getSelection(), el.logView);
+    if (selected === '') {
+      hideSelectionToolbar();
+      return;
+    }
+    const logContent = truncateLog(selected, ASK_AI_MAX_CHARS);
+    const context = buildDeviceContext(detectResult, '日志', consoleBaud);
+    const prompt = buildAskAiPrompt(context, logContent);
+    window.open(buildAskAiUrl(provider, prompt), '_blank', 'noopener');
+    window.getSelection()?.removeAllRanges(); // 触发 selectionchange 自动隐藏工具栏
+  });
+}
+
+setupSelectionToolbar();
 
 // ---- 状态联动 ----
 /** 返回当前波特率选择：'auto' 表示自动（最高速率优先，失败降级）。 */
@@ -429,7 +526,8 @@ el.connectBtn?.addEventListener('click', async () => {
     machine.transition('detected');
     logBuffer.push(
       'info',
-      `检测到芯片 ${detectResult.chip}，Flash ${detectResult.flashSize ?? '未知'}，波特率 ${detectResult.baudrate}`
+      `检测到芯片 ${detectResult.chip}，Flash ${detectResult.flashSize ?? '未知'}，波特率 ${detectResult.baudrate}`,
+      'success'
     );
     if (isStaleStubUsed()) {
       logBuffer.push(
@@ -458,9 +556,11 @@ el.monitorBtn?.addEventListener('click', async () => {
     const port = await requestSerialPort(navigator.serial);
     machine.transition('monitor');
     service = createFlashService(port, DEFAULT_BAUD_RATE, terminal);
+    logBuffer.clear(); // 只看本次复位后的启动日志
+    logBuffer.push('info', '正在复位设备（等效 RST 键），等待启动日志…');
     await service.monitor({ consoleBaud, onConsoleData: appendConsoleLine });
     needsReconnect = true;
-    logBuffer.push('info', `已开始串口监控（波特率 ${consoleBaud}），断开设备即停止。`);
+    logBuffer.push('info', `已开始串口监控（波特率 ${consoleBaud}），断开设备即停止。`, 'success');
   } catch (err) {
     if (machine.getState() !== 'idle') {
       machine.transition('fail');
@@ -500,7 +600,7 @@ el.flashBtn?.addEventListener('click', async () => {
     });
     await service.finish();
     machine.transition('flash-ok');
-    logBuffer.push('info', '烧录完成，设备已复位并运行新固件');
+    logBuffer.push('info', '烧录完成，设备已复位并运行新固件', 'success');
     updateProgress(1, 1);
   } catch (err) {
     machine.transition('flash-fail');
@@ -565,8 +665,12 @@ el.resetDeviceBtn?.addEventListener('click', async () => {
     });
     needsReconnect = true;
     logBuffer.clear(); // 日志区刷新
-    logBuffer.push('info', '已重置设备（等效按下开发板 RST 键），芯片已重启');
-    logBuffer.push('info', `已开始监控开发板串口日志（波特率 ${consoleBaud}），断开设备即停止。`);
+    logBuffer.push('info', '已重置设备（等效按下开发板 RST 键），芯片已重启', 'success');
+    logBuffer.push(
+      'info',
+      `已开始监控开发板串口日志（波特率 ${consoleBaud}），断开设备即停止。`,
+      'success'
+    );
   } catch (err) {
     logBuffer.push('error', `重置设备失败: ${err instanceof Error ? err.message : String(err)}`);
   }

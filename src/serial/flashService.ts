@@ -28,7 +28,7 @@ export interface ResetOptions {
   onConsoleData: (text: string) => void;
 }
 
-/** 串口监控（只读）的选项。 */
+/** 串口监控的选项。 */
 export interface MonitorOptions {
   /** 控制台波特率。 */
   consoleBaud: number;
@@ -46,7 +46,7 @@ export interface FlashService {
   finish(): Promise<void>;
   /** 复位设备（等效按开发板 RST 键），并保持串口打开持续读取开发板日志。 */
   reset(options: ResetOptions): Promise<void>;
-  /** 串口监控：只读打开串口持续读取开发板输出，不进下载模式、不复位。 */
+  /** 串口监控：复位设备（等效 RST 键）后持续读取开发板输出。 */
   monitor(options: MonitorOptions): Promise<void>;
   /** 尽力断开连接（出错时兜底）。 */
   abort(): Promise<void>;
@@ -204,7 +204,7 @@ export function createFlashService(
     }
   }
 
-  /** 串口监控：只读打开串口持续读取开发板输出，不进下载模式、不复位。 */
+  /** 串口监控：复位设备（等效 RST 键）后持续读取开发板输出。 */
   async function monitor(options: MonitorOptions): Promise<void> {
     if (transport !== undefined) {
       await transport.disconnect().catch(() => {});
@@ -215,6 +215,7 @@ export function createFlashService(
     transport = t;
     try {
       await t.connect(options.consoleBaud);
+      await resetPulse(t);
       // 持续读取开发板串口输出，解码后回调；由 abort() 断开时终止
       const decoder = new TextDecoder();
       void t

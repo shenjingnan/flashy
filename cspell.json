@@ -61,7 +61,9 @@
     "nrst",
     "RTC_SW_SYS_RST",
     "deepseek",
-    "noopener"
+    "noopener",
+    "VDIWE",
+    "cbdata"
   ],
   "ignorePaths": [
     "node_modules",

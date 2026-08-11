@@ -16,9 +16,13 @@ export type FlashState =
 /** 日志级别。 */
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
+/** 日志来源分类：system 工具系统消息 / success 成功事件 / flash 烧录日志 / device 开发板输出。 */
+export type LogType = 'system' | 'device' | 'flash' | 'success';
+
 /** 一条日志记录。 */
 export interface LogEntry {
   level: LogLevel;
+  type: LogType;
   text: string;
   /** 毫秒时间戳。 */
   ts: number;
@@ -63,5 +67,5 @@ export interface DetectResult {
 
 /** 日志接收器接口，便于注入与测试。 */
 export interface LogSink {
-  push(level: LogLevel, text: string): void;
+  push(level: LogLevel, text: string, type?: LogType): void;
 }

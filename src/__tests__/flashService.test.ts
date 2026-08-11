@@ -231,16 +231,16 @@ describe('createFlashService', () => {
     expect(monitorTransport?.disconnect).toHaveBeenCalled();
   });
 
-  it('should monitor the device console via rawRead without resetting', async () => {
+  it('should reset the device via physical pulse and monitor its console', async () => {
     const service = createFlashService(port, 115200, makeTerminal());
     const onConsoleData = vi.fn();
     await service.monitor({ consoleBaud: 115200, onConsoleData });
     const monitorTransport = mocks.MockTransport.instances[0];
     expect(monitorTransport?.connect).toHaveBeenCalled();
     expect(monitorTransport?.rawRead).toHaveBeenCalled();
-    // 串口监控不复位芯片
-    expect(monitorTransport?.setRTS).not.toHaveBeenCalled();
-    expect(monitorTransport?.setDTR).not.toHaveBeenCalled();
+    // 串口监控会先物理复位芯片（等效 RST 键），以便看到完整启动日志
+    expect(monitorTransport?.setDTR).toHaveBeenCalled();
+    expect(monitorTransport?.setRTS).toHaveBeenCalled();
     expect(onConsoleData).toHaveBeenCalledWith(expect.stringContaining('ESP-ROM'));
     // 监控期间保持连接
     expect(monitorTransport?.disconnect).not.toHaveBeenCalled();

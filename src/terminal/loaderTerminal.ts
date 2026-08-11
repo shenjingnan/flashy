@@ -14,7 +14,7 @@ export function createLoaderTerminal(sink: LogSink): IEspLoaderTerminal {
   return {
     clean: () => {
       pending = '';
-      sink.push('info', '──────── 连接日志 ────────');
+      sink.push('info', '──────── 连接日志 ────────', 'flash');
     },
     write: (data) => {
       pending += data;
@@ -23,7 +23,7 @@ export function createLoaderTerminal(sink: LogSink): IEspLoaderTerminal {
       for (let i = 0; i < parts.length - 1; i += 1) {
         const line = parts[i];
         if (line !== undefined && line !== '') {
-          sink.push('info', line.trimEnd());
+          sink.push('info', line.trimEnd(), 'flash');
         }
       }
       pending = last;
@@ -32,7 +32,7 @@ export function createLoaderTerminal(sink: LogSink): IEspLoaderTerminal {
       const text = `${pending}${data}`.trimEnd();
       pending = '';
       if (text !== '') {
-        sink.push('info', text);
+        sink.push('info', text, 'flash');
       }
     },
   };
