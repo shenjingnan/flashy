@@ -20,6 +20,15 @@ describe('createLogBuffer', () => {
     expect(lines[1]?.level).toBe('error');
   });
 
+  it('should default the source type to system and accept an explicit type', () => {
+    const buffer = createLogBuffer();
+    buffer.push('info', 'a');
+    buffer.push('info', 'b', 'flash');
+    const lines = buffer.lines();
+    expect(lines[0]?.type).toBe('system');
+    expect(lines[1]?.type).toBe('flash');
+  });
+
   it('should cap the buffer at max and trim oldest entries', () => {
     const buffer = createLogBuffer({ max: 3 });
     buffer.push('info', 'a');
@@ -68,13 +77,14 @@ describe('createLogBuffer', () => {
 
 describe('formatLogEntry', () => {
   it('should format level in uppercase', () => {
-    const entry: LogEntry = { level: 'warn', text: '注意', ts: 0 };
+    const entry: LogEntry = { level: 'warn', text: '注意', ts: 0, type: 'system' };
     expect(formatLogEntry(entry)).toContain(' WARN ');
   });
 
   it('should include padded timestamp components', () => {
     const entry: LogEntry = {
       level: 'info',
+      type: 'system',
       text: 'x',
       ts: new Date(2026, 0, 1, 9, 5, 3, 4).getTime(),
     };

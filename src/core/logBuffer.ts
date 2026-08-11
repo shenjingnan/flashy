@@ -1,4 +1,4 @@
-import type { LogEntry, LogLevel, LogSink } from './types';
+import type { LogEntry, LogLevel, LogSink, LogType } from './types';
 
 /** 环形日志缓冲，实现 LogSink 接口。 */
 export interface LogBuffer extends LogSink {
@@ -28,8 +28,8 @@ export function createLogBuffer(options: LogBufferOptions = {}): LogBuffer {
   }
 
   return {
-    push: (level: LogLevel, text: string) => {
-      entries = [...entries, { level, text, ts: Date.now() }];
+    push: (level: LogLevel, text: string, type: LogType = 'system') => {
+      entries = [...entries, { level, type, text, ts: Date.now() }];
       if (entries.length > max) {
         entries = entries.slice(entries.length - max);
       }

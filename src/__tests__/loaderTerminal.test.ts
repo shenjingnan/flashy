@@ -14,7 +14,7 @@ describe('createLoaderTerminal', () => {
     terminal.write('Connecting....');
     terminal.write('..');
     terminal.writeLine('done');
-    expect(sink.push).toHaveBeenCalledWith('info', 'Connecting......done');
+    expect(sink.push).toHaveBeenCalledWith('info', 'Connecting......done', 'flash');
   });
 
   it('should flush write() data separated by carriage returns', () => {
@@ -31,14 +31,14 @@ describe('createLoaderTerminal', () => {
     const sink = makeSink();
     const terminal = createLoaderTerminal(sink);
     terminal.writeLine('Chip is ESP32-D0WD-V3');
-    expect(sink.push).toHaveBeenCalledWith('info', 'Chip is ESP32-D0WD-V3');
+    expect(sink.push).toHaveBeenCalledWith('info', 'Chip is ESP32-D0WD-V3', 'flash');
   });
 
   it('should trim trailing whitespace from emitted lines', () => {
     const sink = makeSink();
     const terminal = createLoaderTerminal(sink);
     terminal.writeLine('  some line  ');
-    expect(sink.push).toHaveBeenCalledWith('info', '  some line');
+    expect(sink.push).toHaveBeenCalledWith('info', '  some line', 'flash');
   });
 
   it('should skip empty lines', () => {

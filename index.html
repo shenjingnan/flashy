@@ -4,13 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Flashy —— 浏览器端 ESP32 固件烧录工具" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <title>Flashy · ESP32 固件烧录</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <header class="app-header">
       <div class="app-title">
-        <h1>Flashy</h1>
+        <h1>
+          <svg class="app-logo" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+            <path
+              d="M571.648 46.208a42.666667 42.666667 0 0 1 25.344 44.416L560.298667 384h264.362666c10.24 0 20.693333 0 29.184 0.768 8.064 0.725333 23.466667 2.645333 36.821334 13.44a64 64 0 0 1 23.765333 50.773333c-0.256 17.152-8.618667 30.250667-13.226667 36.864-4.864 7.04-11.52 15.061333-18.090666 22.954667l-381.013334 457.173333a42.666667 42.666667 0 0 1-75.093333-32.597333l36.693333-293.376H199.296c-10.24 0-20.693333 0-29.184-0.768-8.064-0.725333-23.466667-2.645333-36.821333-13.44a64 64 0 0 1-23.765334-50.773333c0.256-17.152 8.618667-30.250667 13.226667-36.864 4.864-7.04 11.52-15.061333 18.090667-22.954667l0.981333-1.152L521.898667 58.026667a42.666667 42.666667 0 0 1 49.749333-11.818667z"
+              fill="#ff6600"
+            />
+          </svg>
+          Flashy
+        </h1>
         <span class="app-subtitle">ESP32 固件烧录工具</span>
       </div>
       <div class="app-status">
@@ -70,7 +79,6 @@
           <div class="header-actions">
             <label for="console-baud" class="console-baud-label">控制台波特率</label>
             <select id="console-baud" class="console-baud" name="console-baud"></select>
-            <button id="copy-log-btn" type="button" class="btn btn-tiny">复制</button>
             <div class="ai-dropdown">
               <button id="ask-ai-log-btn" type="button" class="btn btn-tiny">问 AI ▾</button>
               <div id="ask-ai-log-menu" class="ai-menu" hidden>
@@ -79,10 +87,21 @@
                 <button type="button" data-ai="claude">Claude</button>
               </div>
             </div>
+            <button id="copy-log-btn" type="button" class="btn btn-tiny">复制</button>
             <button id="clear-log-btn" type="button" class="btn btn-tiny">清空</button>
           </div>
         </div>
         <pre id="log-view" class="log-view" aria-live="polite"></pre>
+        <div id="selection-toolbar" class="selection-toolbar" hidden>
+          <div class="ai-dropdown">
+            <button id="selection-ask-btn" type="button" class="btn btn-tiny">问 AI ▾</button>
+            <div id="selection-ask-menu" class="ai-menu" hidden>
+              <button type="button" data-ai="deepseek">Deepseek</button>
+              <button type="button" data-ai="chatgpt">ChatGPT</button>
+              <button type="button" data-ai="claude">Claude</button>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 

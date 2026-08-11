@@ -44,11 +44,15 @@ describe('main.ts 冒烟测试', () => {
     expect(flashBtn?.disabled).toBe(true);
   });
 
-  it('should render the ready log entry', async () => {
+  it('should render the ready log entry as a system message', async () => {
     await import('../main');
     await new Promise((resolve) => setTimeout(resolve, 50)); // 等待防抖渲染
     const logView = document.getElementById('log-view');
     expect(logView?.textContent).toContain('Flashy 已就绪');
+    const readyNode = [...(logView?.querySelectorAll('.log-line') ?? [])].find((node) =>
+      node.textContent?.includes('Flashy 已就绪')
+    );
+    expect(readyNode?.classList.contains('log-system')).toBe(true);
   });
 
   it('should populate the console baud select', async () => {
@@ -63,6 +67,15 @@ describe('main.ts 冒烟测试', () => {
     for (const id of ['copy-log-btn', 'ask-ai-log-btn', 'ask-ai-log-menu']) {
       expect(document.getElementById(id)).not.toBeNull();
     }
+  });
+
+  it('should expose a hidden selection toolbar with ask-AI control', async () => {
+    await import('../main');
+    const toolbar = document.getElementById('selection-toolbar') as HTMLElement | null;
+    const askBtn = document.getElementById('selection-ask-btn') as HTMLButtonElement | null;
+    expect(toolbar).not.toBeNull();
+    expect(toolbar?.hidden).toBe(true); // 初始隐藏，选中日志后才出现
+    expect(askBtn).not.toBeNull();
   });
 
   it('should expose the serial monitor button', async () => {
