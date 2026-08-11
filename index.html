@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Flashy —— 浏览器端 ESP32 固件烧录工具" />
+    <title>Flashy · ESP32 固件烧录</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="app-title">
+        <h1>Flashy</h1>
+        <span class="app-subtitle">ESP32 固件烧录工具</span>
+      </div>
+      <div class="app-status">
+        <span id="chip-badge" class="chip-badge" data-state="idle">未连接</span>
+        <span id="version" class="app-version"></span>
+      </div>
+    </header>
+
+    <main class="app-body">
+      <section class="control-panel">
+        <div class="panel-group">
+          <h2>1 · 连接设备</h2>
+          <div class="btn-row">
+            <button id="connect-btn" type="button" class="btn btn-primary">连接设备</button>
+            <button id="monitor-btn" type="button" class="btn btn-ghost">串口监控</button>
+          </div>
+          <p id="device-info" class="device-info">尚未连接设备</p>
+        </div>
+
+        <div class="panel-group">
+          <h2>2 · 选择固件</h2>
+          <input id="file-input" type="file" accept=".bin,application/octet-stream" />
+          <p id="file-info" class="file-info">未选择固件文件</p>
+        </div>
+
+        <div class="panel-group">
+          <h2>3 · 烧录设置</h2>
+          <div class="field-row">
+            <label for="baud-select">波特率</label>
+            <select id="baud-select" name="baud"></select>
+          </div>
+          <div class="field-row">
+            <label for="address-input">烧录地址</label>
+            <input id="address-input" name="address" type="text" value="0x0" spellcheck="false" />
+          </div>
+        </div>
+
+        <div class="panel-group">
+          <button id="flash-btn" type="button" class="btn btn-danger" disabled>开始烧录</button>
+          <div class="btn-row">
+            <button id="reset-btn" type="button" class="btn btn-ghost" disabled>断开设备</button>
+            <button id="reset-device-btn" type="button" class="btn btn-ghost" disabled>重置设备</button>
+          </div>
+        </div>
+
+        <div id="progress-wrap" class="progress-wrap" hidden>
+          <progress id="flash-progress" value="0" max="100"></progress>
+          <span id="progress-label" class="progress-label">0%</span>
+        </div>
+
+        <div id="compat-warning" class="compat-warning" hidden></div>
+      </section>
+
+      <section class="terminal-panel">
+        <div class="terminal-header">
+          <span>日志（烧录 / 开发板）</span>
+          <div class="header-actions">
+            <label for="console-baud" class="console-baud-label">控制台波特率</label>
+            <select id="console-baud" class="console-baud" name="console-baud"></select>
+            <button id="copy-log-btn" type="button" class="btn btn-tiny">复制</button>
+            <div class="ai-dropdown">
+              <button id="ask-ai-log-btn" type="button" class="btn btn-tiny">问 AI ▾</button>
+              <div id="ask-ai-log-menu" class="ai-menu" hidden>
+                <button type="button" data-ai="deepseek">Deepseek</button>
+                <button type="button" data-ai="chatgpt">ChatGPT</button>
+                <button type="button" data-ai="claude">Claude</button>
+              </div>
+            </div>
+            <button id="clear-log-btn" type="button" class="btn btn-tiny">清空</button>
+          </div>
+        </div>
+        <pre id="log-view" class="log-view" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

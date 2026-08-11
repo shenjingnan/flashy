@@ -1,6 +1,6 @@
 # Build Command
 
-构建项目。
+构建项目（类型检查 + 生产构建）。
 
 ## 执行步骤
 
@@ -10,17 +10,17 @@
 
 ## 构建配置
 
-- 构建工具: tsdown
-- 输出格式: ESM
-- 类型声明: 自动生成 .d.ts
-- Source Map: 启用
+- 构建工具: Vite
+- 入口: `index.html` → `src/main.ts`
+- 输出: `dist/` 纯静态文件（可部署到任意静态托管）
+- `base: './'` 支持子路径部署（如 GitHub Pages）
 
 ## 预期输出
 
 ```
 dist/
-├── index.mjs
-├── index.mjs.map
-├── index.d.mts
-└── index.d.mts.map
+├── index.html
+└── assets/
+    ├── index-*.js
+    └── index-*.css
 ```
