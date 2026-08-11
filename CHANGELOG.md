@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.0] (2026-08-11)
+
+### 重构为浏览器端 ESP32 固件烧录工具
+
+将原 TypeScript 库模板重构为基于 Vite 的纯 Web 单页应用：
+
+- **feat:** 引入 esptool-js，支持浏览器直连 ESP32 开发板烧录固件（Web Serial）
+- **feat:** 芯片自动检测，无需手动选择芯片型号
+- **feat:** 波特率预设（921600 / 460800 / 230400 / 115200）
+- **feat:** 可编辑烧录地址（默认 `0x0`）+ 烧录进度条 + 控制台日志
+- **feat:** 烧录完成后自动复位设备
+- **chore:** 构建工具由 tsdown 迁移至 Vite
+- **chore:** 移除 npm 发布链路（release-it / release.yml）
+- **test:** 核心逻辑 100% 覆盖率 + main.ts happy-dom 冒烟测试
+
 ## [0.4.5](https://github.com/shenjingnan/ai-typescript-starter/compare/v0.4.4...v0.4.5) (2026-04-14)
 
 ### Bug Fixes

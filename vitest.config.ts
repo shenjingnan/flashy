@@ -8,7 +8,7 @@ const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf-8')) as {
 
 export default defineConfig({
   define: {
-    __VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   test: {
     globals: true,
@@ -24,7 +24,7 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.config.*',
         '**/__tests__/**',
-        'examples/**',
+        'src/main.ts',
       ],
       thresholds: {
         lines: 80,

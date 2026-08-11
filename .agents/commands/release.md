@@ -1,35 +1,20 @@
-# Release Command
+# Deploy Command
 
-创建项目发布。
+构建并部署 Flashy 静态站点。
 
 ## 执行步骤
 
 1. 确保所有测试通过: `pnpm run test`
 2. 确保代码检查通过: `pnpm run check`
 3. 确保构建成功: `pnpm run build`
-4. 运行发布: `pnpm run release`
+4. 将 `dist/` 部署到静态托管
 
-## 发布流程
+## 部署说明
 
-release-it 会自动执行以下操作：
+- 构建产物 `dist/` 是纯静态文件
+- 可部署到 GitHub Pages、Vercel、Cloudflare Pages 等任意静态托管
+- **必须使用 HTTPS**：Web Serial API 在非安全上下文中不可用
 
-1. 检查工作区是否干净
-2. 提示选择版本号（major/minor/patch）
-3. 更新 package.json 版本
-4. 更新 CHANGELOG.md
-5. 创建 Git commit
-6. 创建 Git tag
-7. 推送到远程仓库
-8. 创建 GitHub Release
+## 验证
 
-## 版本规范
-
-遵循语义化版本规范：
-
-- **major**: 不兼容的 API 变更
-- **minor**: 向后兼容的新功能
-- **patch**: 向后兼容的 Bug 修复
-
-## 配置文件
-
-发布配置位于 `.release-it.json`。
+部署后通过 Chrome/Edge 打开页面，确认可正常加载并弹出浏览器串口选择器。

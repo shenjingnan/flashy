@@ -10,14 +10,20 @@
 ## 测试配置
 
 - 测试框架: Vitest
-- 环境: Node.js
+- 环境: Node.js + happy-dom（main.ts 冒烟测试）
 - 全局 API: 启用
 - 覆盖率阈值: 80%
 
 ## 测试文件位置
 
-- 单元测试: `src/**/*.test.ts`
-- 集成测试: `tests/**/*.test.ts` (如存在)
+- 单元测试: `src/__tests__/*.test.ts`
+- main.ts 冒烟测试: `src/__tests__/main.test.ts`（happy-dom 环境）
+
+## 测试策略
+
+- **纯逻辑**（core/、terminal/）：node 环境直接单测
+- **Web Serial**：portManager 依赖注入 fake SerialLike
+- **esptool-js**：flashService 通过 `vi.mock('esptool-js')`
 
 ## 常用命令
 

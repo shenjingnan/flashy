@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢您考虑为 ai-typescript-starter 做贡献！
+感谢您考虑为 Flashy 做贡献！
 
 ## 行为准则
 
@@ -10,7 +10,7 @@
 
 ### 报告 Bug
 
-如果您发现了 Bug，请通过 [GitHub Issues](https://github.com/shenjingnan/ai-typescript-starter/issues) 报告。
+如果您发现了 Bug，请通过 [GitHub Issues](https://github.com/shenjingnan/flashy/issues) 报告。
 
 报告 Bug 时，请包含：
 
@@ -34,8 +34,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/shenjingnan/ai-typescript-starter.git
-cd ai-typescript-starter
+git clone https://github.com/shenjingnan/flashy.git
+cd flashy
 
 # 安装依赖
 pnpm install
@@ -45,6 +45,9 @@ pnpm test
 
 # 运行代码检查
 pnpm run check
+
+# 本地开发（浏览器打开 http://localhost:5173）
+pnpm run dev
 ```
 
 #### 分支策略
@@ -120,35 +123,18 @@ docs: update README with new examples
 - 代码示例使用代码块
 - 更新相关文档
 
-## 发布流程
+## 部署
 
-维护者可以使用以下步骤发布新版本：
+Flashy 是纯静态 Web 应用，`pnpm run build` 后可将 `dist/` 部署到任意静态托管。
 
-```bash
-# 确保在 main 分支
-git checkout main
-
-# 拉取最新代码
-git pull origin main
-
-# 运行发布命令
-pnpm run release
-```
-
-发布过程会自动：
-1. 更新版本号
-2. 更新 CHANGELOG.md
-3. 创建 Git tag
-4. 推送到远程仓库
-5. 创建 GitHub Release
+> 线上部署必须使用 HTTPS，因为 Web Serial API 在非安全上下文中不可用。
 
 ## 获取帮助
 
 如果您有任何问题，可以：
 
 - 查看 [文档](../docs/)
-- 在 [Discussions](https://github.com/shenjingnan/ai-typescript-starter/discussions) 提问
-- 创建 [Issue](https://github.com/shenjingnan/ai-typescript-starter/issues)
+- 创建 [Issue](https://github.com/shenjingnan/flashy/issues)
 
 ## 许可证
 

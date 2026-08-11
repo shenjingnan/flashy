@@ -1,222 +1,155 @@
 # 架构文档
 
-本文档描述 ai-typescript-starter 项目的架构设计。
+本文档描述 Flashy（浏览器端 ESP32 固件烧录工具）的架构设计。
 
 ## 架构概览
 
 ```mermaid
 graph TB
-    subgraph Source["源代码 (src/)"]
-        index["index.ts<br/>入口文件"]
-        modules["模块文件"]
-        tests["__tests__/<br/>测试文件"]
+    subgraph Browser["浏览器 (Chrome/Edge)"]
+        UI["UI 层<br/>main.ts + index.html"]
+        subgraph Core["核心逻辑"]
+            SM["状态机<br/>stateMachine.ts"]
+            ADDR["地址解析<br/>address.ts"]
+            BAUD["波特率<br/>baudrates.ts"]
+            LOG["日志缓冲<br/>logBuffer.ts"]
+        end
+        subgraph SerialLayer["串口层"]
+            PORT["portManager.ts<br/>Web Serial 封装"]
+            FLASH["flashService.ts<br/>esptool-js 编排"]
+        end
+        TERM["loaderTerminal.ts<br/>终端桥接"]
     end
 
-    subgraph Build["构建流程"]
-        tsdown["tsdown"]
-        dist["dist/<br/>构建产物"]
+    subgraph External["外部"]
+        WEBSERIAL["Web Serial API"]
+        ESPTOOL["esptool-js"]
+        BOARD["ESP32 开发板"]
     end
 
-    subgraph Quality["代码质量"]
-        biome["Biome<br/>Lint + Format"]
-        typescript["TypeScript<br/>类型检查"]
-        vitest["Vitest<br/>测试"]
-        cspell["cspell<br/>拼写检查"]
-    end
-
-    subgraph CI["CI/CD"]
-        actions["GitHub Actions"]
-        release["release-it"]
-    end
-
-    index --> tsdown
-    modules --> tsdown
-    tsdown --> dist
-
-    index --> biome
-    modules --> biome
-    tests --> vitest
-    index --> typescript
-    modules --> typescript
-
-    actions --> biome
-    actions --> typescript
-    actions --> vitest
-    actions --> tsdown
+    UI --> SM
+    UI --> PORT
+    UI --> FLASH
+    UI --> LOG
+    SM --> LOG
+    PORT --> WEBSERIAL
+    FLASH --> ESPTOOL
+    ESPTOOL --> WEBSERIAL
+    TERM --> LOG
+    FLASH --> TERM
+    WEBSERIAL --> BOARD
 ```
 
 ## 目录结构
 
 ```
-ai-typescript-starter/
-├── .claude/              # Claude Code 配置
-│   ├── commands/         # Slash 命令定义
-│   ├── skills/           # 技能定义
-│   ├── settings.json     # 项目设置
-│   └── settings.local.json.example
-├── .github/              # GitHub 配置
-│   ├── workflows/        # CI/CD 工作流
-│   │   ├── ci.yml        # 持续集成
-│   │   └── release.yml   # 发布流程
-│   ├── ISSUE_TEMPLATE/   # Issue 模板
-│   ├── copilot-instructions.md
-│   └── dependabot.yml
-├── docs/                 # 项目文档
-│   ├── architecture.md   # 架构文档
-│   ├── api.md            # API 文档
-│   └── contributing.md   # 贡献指南
-├── examples/             # 使用示例
-├── src/                  # 源代码
-│   ├── index.ts          # 入口文件
-│   └── __tests__/        # 测试文件
-├── dist/                 # 构建产物 (git ignored)
-├── coverage/             # 测试覆盖率报告 (git ignored)
-└── [配置文件]
+flashy/
+├── index.html              # 应用入口页（控件骨架 + 模块加载）
+├── vite.config.ts          # Vite 构建配置（base './' 便于子路径部署）
+├── src/
+│   ├── main.ts             # UI 装配与事件绑定（薄层，被 happy-dom 冒烟测试覆盖）
+│   ├── style.css           # 深色控制台风格样式
+│   ├── vite-env.d.ts       # vite/client 类型与 __APP_VERSION__ 声明
+│   ├── core/               # 纯逻辑模块（零依赖、可直接单测）
+│   │   ├── types.ts        # 共享类型定义
+│   │   ├── stateMachine.ts # 烧录流程状态机
+│   │   ├── address.ts      # Flash 地址解析/校验/格式化
+│   │   ├── baudrates.ts    # 波特率预设与校验
+│   │   └── logBuffer.ts    # 环形日志缓冲 + 格式化
+│   ├── serial/
+│   │   ├── portManager.ts  # Web Serial API 封装（能力检测 + 选择设备）
+│   │   └── flashService.ts # esptool-js 编排（检测/写入/复位/断开）
+│   ├── terminal/
+│   │   └── loaderTerminal.ts # IEspLoaderTerminal 桥接到日志缓冲
+│   └── __tests__/          # 单元测试 + main.ts 冒烟测试
+└── docs/                   # 文档
 ```
 
-## 技术决策
+## 关键设计决策
 
-### 为什么选择 tsdown？
+### 为什么用 Web Serial + esptool-js？
 
-- **零配置**: 开箱即用，无需复杂配置
-- **快速**: 基于 rolldown，构建速度极快
-- **ESM 优先**: 原生支持 ESM 格式
-- **类型声明**: 自动生成 .d.ts 文件
+- **Web Serial API** 是浏览器原生能力，无需用户安装驱动；本地 `localhost` 或线上 HTTPS 即可使用。
+- **esptool-js** 是 Espressif 官方维护的 esptool.py JS 移植，封装了同步协议、波特率切换、Flash 写入与 MD5 校验，避免自行实现底层协议。
+- 参考实现为 Espressif 官方的 [esp-launchpad](https://github.com/espressif/esp-launchpad)。
 
-### 为什么选择 Vitest？
+### 为什么不需要手动选择芯片？
 
-- **Vite 原生**: 与 Vite 生态无缝集成
-- **快速**: 基于 Vite，测试启动快
-- **兼容性**: API 与 Jest 兼容
-- **功能丰富**: 内置覆盖率、快照、UI 等
+`ESPLoader.main()` 在连接时会通过串口自动检测芯片型号（返回如 `ESP32-D0WD-V3`），覆盖 ESP32 / ESP32-C3 / ESP32-S3 / ESP8266 等。因此 UI 无需芯片类型选择，连接后直接展示检测结果。
 
-### 为什么选择 Biome？
+### 为什么串口由 esptool-js 打开？
 
-- **统一工具**: Lint + Format 合一
-- **快速**: Rust 实现，性能极佳
-- **Prettier 兼容**: 格式化风格可配置为 Prettier
-- **详细错误信息**: 提供清晰的错误提示
+`ESPLoader` 构造后调用 `main()`，内部会调用 `Transport.connect(baudrate, serialOptions)` 打开串口（默认 8N1）。因此 `portManager` 只负责**能力检测**与**选择设备**，不重复打开串口。
 
-### 为什么选择 pnpm？
+### 为什么用自研纯状态机？
 
-- **节省磁盘空间**: 内容寻址存储
-- **快速安装**: 符号链接，避免重复安装
-- **严格依赖**: 避免幽灵依赖
-- **Monorepo 支持**: 内置 workspace 支持
+烧录流程存在明确的阶段（未连接 → 连接中 → 检测芯片 → 已连接 → 烧录中 → 成功/错误），状态迁移有限且非法迁移需要被拦截。自研状态机零依赖、可单测，比引入状态管理库更轻量。
 
-## 构建流程
+### 为什么 `data` 用 `Uint8Array`？
+
+esptool-js 0.6.1 的 `FlashOptions.fileArray[].data` 类型为 `Uint8Array`，由 `file.arrayBuffer()` 转换得到。
+
+## 状态机迁移表
 
 ```mermaid
-flowchart LR
-    A[TypeScript 源码] --> B[tsdown]
-    B --> C[ESM 模块]
-    B --> D[类型声明]
-    B --> E[Source Map]
-    C --> F[dist/index.mjs]
-    D --> G[dist/index.d.mts]
-    E --> H[dist/index.mjs.map]
+stateDiagram-v2
+    [*] --> idle
+    idle --> connecting: connect
+    connecting --> detecting: port-open
+    connecting --> error: fail
+    detecting --> connected: detected
+    detecting --> error: fail
+    connected --> flashing: flash-start
+    connected --> idle: disconnect
+    flashing --> success: flash-ok
+    flashing --> error: flash-fail
+    success --> idle: disconnect
+    error --> idle: reset
+```
+
+非法迁移会抛出 `Error`。
+
+## 烧录流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant M as main.ts
+    participant P as portManager
+    participant F as flashService
+    participant E as esptool-js
+
+    U->>M: 点击「连接设备」
+    M->>P: requestSerialPort()
+    P-->>M: SerialPort
+    M->>F: createFlashService(port, baudrate, terminal)
+    F->>E: main() 自动检测芯片
+    E-->>F: 芯片名 + Flash 大小
+    F-->>M: DetectResult
+    M-->>U: 展示「芯片 · Flash」
+    U->>M: 选择 .bin + 地址 + 点击「开始烧录」
+    M->>F: flash({ data, address, onProgress })
+    F->>E: writeFlash()
+    E-->>F: reportProgress()
+    F-->>M: 进度回调 → 更新进度条
+    F->>E: after('hard_reset') + disconnect
+    M-->>U: 烧录完成，设备已复位
 ```
 
 ## 测试策略
 
-### 测试金字塔
-
-```mermaid
-graph TB
-    subgraph Tests["测试层次"]
-        unit["单元测试<br/>src/__tests__/<br/>最快、最底层"]
-        integration["集成测试<br/>tests/<br/>中等复杂度"]
-        e2e["端到端测试<br/>e2e/<br/>最慢、最全面"]
-    end
-
-    unit --> integration
-    integration --> e2e
-```
-
-### 覆盖率要求
-
-| 指标 | 阈值 |
+| 模块 | 策略 |
 |------|------|
-| 行覆盖率 | 80% |
-| 函数覆盖率 | 80% |
-| 分支覆盖率 | 80% |
-| 语句覆盖率 | 80% |
+| `core/*` | 纯函数直接单测（node 环境） |
+| `serial/portManager` | 注入 fake Serial 依赖测试 |
+| `serial/flashService` | `vi.mock('esptool-js')` 测试编排逻辑 |
+| `terminal/loaderTerminal` | 直接单测 write/writeLine/clean 映射 |
+| `main.ts` | happy-dom 冒烟测试（初始化、控件联动） |
 
-## CI/CD 流程
+覆盖率阈值：行/函数/分支/语句均 ≥ 80%。
 
-```mermaid
-flowchart TB
-    subgraph Triggers["触发条件"]
-        push["Push to main"]
-        pr["Pull Request"]
-        release["GitHub Release"]
-    end
+## CI/CD
 
-    subgraph CI["CI 流程"]
-        install["安装依赖"]
-        typecheck["类型检查"]
-        lint["代码检查"]
-        build["构建"]
-        test["测试"]
-        coverage["覆盖率"]
-    end
+`.github/workflows/ci.yml` 在 push / PR 到 `main` 时执行：类型检查 → 代码检查 → 构建 → 测试 → 覆盖率报告。
 
-    subgraph CD["CD 流程"]
-        publish["发布到 npm"]
-    end
-
-    push --> CI
-    pr --> CI
-    release --> CD
-```
-
-## AI 集成架构
-
-```mermaid
-graph TB
-    subgraph ClaudeCode["Claude Code"]
-        claude["Claude AI"]
-        commands["Slash Commands"]
-        skills["Skills"]
-    end
-
-    subgraph Config["配置文件"]
-        CLAUDE["CLAUDE.md<br/>项目规范"]
-        settings["settings.json<br/>项目设置"]
-    end
-
-    subgraph Project["项目"]
-        src["源代码"]
-        tests["测试"]
-        docs["文档"]
-    end
-
-    claude --> CLAUDE
-    claude --> settings
-    claude --> commands
-    claude --> skills
-    commands --> src
-    skills --> src
-    CLAUDE --> src
-```
-
-## 扩展建议
-
-### 添加新模块
-
-1. 在 `src/` 下创建新文件
-2. 在 `src/index.ts` 中导出
-3. 在 `src/__tests__/` 添加测试
-4. 更新文档
-
-### 添加新命令
-
-1. 在 `.claude/commands/` 创建 `.md` 文件
-2. 定义命令描述和步骤
-3. 在 `CLAUDE.md` 中添加命令说明
-
-### 添加新技能
-
-1. 在 `.claude/skills/` 创建目录
-2. 创建 `SKILL.md` 文件定义技能
-3. 在项目上下文中引用
+`vite build` 产物为纯静态文件，可通过 GitHub Pages 等任意静态托管部署（HTTPS 是 Web Serial 的硬性要求）。
