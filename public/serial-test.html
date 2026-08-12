@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>serial-test</title>
+    <style>
+      body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        margin: 0;
+        padding: 16px;
+        background: #111;
+        color: #ddd;
+      }
+      .bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+      }
+      button {
+        font: inherit;
+        padding: 4px 10px;
+        cursor: pointer;
+        border: 1px solid #555;
+        border-radius: 4px;
+        background: #222;
+        color: #eee;
+      }
+      button:hover {
+        background: #333;
+      }
+      input {
+        font: inherit;
+        width: 360px;
+        padding: 4px 8px;
+        background: #1a1a1a;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 4px;
+      }
+      #status {
+        color: #8bc34a;
+      }
+      #log {
+        background: #0d0d0d;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 8px;
+        height: 60vh;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .rx {
+        color: #7ec8e3;
+      }
+      .act {
+        color: #c792ea;
+      }
+      .err {
+        color: #ff6b6b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <button type="button" id="connectBtn">连接设备</button>
+      <button type="button" id="disconnectBtn">断开</button>
+      <button type="button" id="runBtn">执行序列</button>
+      <span>序列：</span>
+      <input id="seqInput" placeholder="D1|R1|W100|D0|W50|R0|W300" />
+      <span id="status"></span>
+    </div>
+    <div id="log"></div>
+    <script>
+      'use strict';
+      const $ = (id) => document.getElementById(id);
+      const logEl = $('log');
+      const seqInput = $('seqInput');
+      let port = null;
+      let reader = null;
+      const decoder = new TextDecoder();
+      let byteCount = 0;
+      const params = new URLSearchParams(location.search);
+
+      // 默认序列：优先 ?seq=，否则候选 A（显式 DTR 翻转 + EN 释放时 IO0 高）
+      seqInput.value = params.get('seq') || 'D1|R1|W100|D0|W50|R0|W300';
+
+      function appendLine(cls, text) {
+        const line = document.createElement('div');
+        line.className = cls || '';
+        const ts = new Date().toISOString().slice(11, 23);
+        line.textContent = `[${ts}] ${text}`;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      const log = (t) => appendLine('act', t);
+      const logRx = (t) => appendLine('rx', t);
+      const logErr = (t) => appendLine('err', t);
+
+      function setStatus(text) {
+        $('status').textContent = text;
+      }
+
+      async function connect() {
+        if (!('serial' in navigator)) {
+          logErr('当前浏览器不支持 Web Serial API');
+          return;
+        }
+        try {
+          // 先尝试已授权端口；没有则弹出选择器（需用户手势）
+          let p = (await navigator.serial.getPorts())[0];
+          if (!p) {
+            p = await navigator.serial.requestPort();
+          }
+          await p.open({ baudRate: 115200 });
+          port = p;
+          const info = p.getInfo ? p.getInfo() : {};
+          const vid = (info.usbVendorId ?? 0).toString(16);
+          const pid = (info.usbProductId ?? 0).toString(16);
+          setStatus(`已连接 VID=${vid} PID=${pid}`);
+          log(`已连接：VID=${vid} PID=${pid}，开始读取`);
+          startRead();
+        } catch (err) {
+          logErr(`连接失败: ${err}`);
+          setStatus(`err:${err}`);
+        }
+      }
+
+      async function startRead() {
+        if (!port?.readable) return;
+        reader = port.readable.getReader();
+        (async () => {
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              if (value && value.length > 0) {
+                byteCount += value.length;
+                const text = decoder.decode(value, { stream: true });
+                logRx(text.replace(/\r/g, ''));
+              }
+            }
+          } catch (err) {
+            if (!String(err).includes('cancel')) logErr(`读取中断: ${err}`);
+          }
+        })();
+      }
+
+      function parseSeq(s) {
+        return s
+          .split('|')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => ({ code: part[0].toUpperCase(), arg: part.slice(1) }));
+      }
+
+      async function runSeq() {
+        if (!port) {
+          logErr('未连接设备，请先点「连接设备」');
+          setStatus('err:未连接');
+          return;
+        }
+        const s = seqInput.value.trim();
+        const steps = parseSeq(s);
+        log(`--- 执行序列: ${s} ---`);
+        for (const step of steps) {
+          if (step.code === 'D') {
+            await port.setSignals({ dataTerminalReady: step.arg === '1' });
+            log(`  DTR=${step.arg}`);
+          } else if (step.code === 'R') {
+            await port.setSignals({ requestToSend: step.arg === '1' });
+            log(`  RTS=${step.arg}`);
+          } else if (step.code === 'W') {
+            const ms = Number(step.arg);
+            await new Promise((r) => setTimeout(r, ms));
+            log(`  等待 ${ms}ms`);
+          } else {
+            logErr(`未知指令: ${step.code}`);
+          }
+        }
+        setStatus(`seq 完成 bytes=${byteCount}`);
+      }
+
+      $('connectBtn').addEventListener('click', connect);
+      $('runBtn').addEventListener('click', runSeq);
+      $('disconnectBtn').addEventListener('click', async () => {
+        try {
+          if (reader) {
+            await reader.cancel();
+            reader = null;
+          }
+          if (port) await port.close();
+        } catch (err) {
+          logErr(`断开失败: ${err}`);
+        }
+        port = null;
+        setStatus('已断开');
+        log('已断开');
+      });
+
+      // ?autorun=1：自动连接（仅当端口已授权）+ 执行序列 + 读取 duration ms
+      if (params.get('autorun') === '1') {
+        (async () => {
+          await connect();
+          await runSeq();
+          const dur = Number(params.get('duration') || '1500');
+          await new Promise((r) => setTimeout(r, dur));
+          const seqShort = seqInput.value.replace(/\|/g, '');
+          const ok = byteCount > 0;
+          document.title = `serial-test | ${ok ? 'ok' : 'silent'} | ${seqShort} | bytes=${byteCount}`;
+          log(ok ? `>>> 检测到 ${byteCount} 字节（序列有效）` : '>>> 未检测到数据（序列无效）');
+        })();
+      }
+    </script>
+  </body>
+</html>

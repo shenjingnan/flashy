@@ -71,6 +71,42 @@ body {
   font-size: 13px;
 }
 
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.header-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.header-link img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.header-link:hover {
+  background: var(--panel-border);
+}
+
+.header-link:hover img {
+  filter: brightness(1.35);
+}
+
 .app-status {
   display: flex;
   align-items: center;
@@ -332,6 +368,7 @@ input[type="file"]::file-selector-button {
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   overflow: hidden;
+  position: relative; /* 供「回到底部」浮动按钮 absolute 定位 */
 }
 
 .terminal-header {
@@ -428,6 +465,41 @@ input[type="file"]::file-selector-button {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* 虚拟滚动：占位容器撑起滚动高度，行节点在其中绝对定位 */
+.log-virtual {
+  position: relative;
+  width: 100%;
+}
+
+.log-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* 字体/换行等样式由 .log-view(pre) 继承 */
+}
+
+/* 「回到底部」浮动按钮：仅当用户离开日志底部时显示 */
+.scroll-bottom-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 25; /* 低于 .selection-toolbar(30)，避免遮挡选区工具栏 */
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 6px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.scroll-bottom-btn:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+/* 必须显式声明，否则作者样式优先级会覆盖 UA 的 [hidden]{display:none} */
+.scroll-bottom-btn[hidden] {
+  display: none;
 }
 
 .console-baud-label {
@@ -558,12 +630,21 @@ input[type="file"]::file-selector-button {
 .builtin-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   background: var(--terminal-bg);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.builtin-item:hover {
+  border-color: var(--accent);
+  background-color: rgba(59, 130, 246, 0.08);
 }
 
 .builtin-meta {
@@ -581,26 +662,6 @@ input[type="file"]::file-selector-button {
 .builtin-desc {
   font-size: 12px;
   color: var(--text-dim);
-}
-
-/* ---- 关注引导 ---- */
-.follow-modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.follow-modal-body p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text);
-}
-
-.follow-modal-body .btn-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 /* ---- 响应式 ---- */
