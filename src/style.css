@@ -368,6 +368,7 @@ input[type="file"]::file-selector-button {
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   overflow: hidden;
+  position: relative; /* 供「回到底部」浮动按钮 absolute 定位 */
 }
 
 .terminal-header {
@@ -464,6 +465,41 @@ input[type="file"]::file-selector-button {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* 虚拟滚动：占位容器撑起滚动高度，行节点在其中绝对定位 */
+.log-virtual {
+  position: relative;
+  width: 100%;
+}
+
+.log-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* 字体/换行等样式由 .log-view(pre) 继承 */
+}
+
+/* 「回到底部」浮动按钮：仅当用户离开日志底部时显示 */
+.scroll-bottom-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 25; /* 低于 .selection-toolbar(30)，避免遮挡选区工具栏 */
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 6px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.scroll-bottom-btn:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+/* 必须显式声明，否则作者样式优先级会覆盖 UA 的 [hidden]{display:none} */
+.scroll-bottom-btn[hidden] {
+  display: none;
 }
 
 .console-baud-label {

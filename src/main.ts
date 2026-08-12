@@ -20,10 +20,23 @@ import {
   loadBuiltinFirmware,
 } from './core/builtinFirmwares';
 import { parseEspIdfLevel } from './core/espIdfLog';
-import { createLogBuffer, formatBytes, formatLogEntry } from './core/logBuffer';
+import { createLogBuffer, formatBytes, formatLogEntry, type LogBuffer } from './core/logBuffer';
+import { formatLogTail, hasTailText } from './core/logExport';
 import { selectionTextInside } from './core/logSelection';
+import { isNearBottom, planLogRender } from './core/scrollUtils';
 import { createFlashStateMachine } from './core/stateMachine';
-import type { BaudRate, DetectResult } from './core/types';
+import type { BaudRate, DetectResult, LogEntry } from './core/types';
+import {
+  appendHeights,
+  applyMeasurements,
+  createVirtualLogState,
+  type RowMeasurement,
+  rowTop,
+  trimHead,
+  unionWithSelection,
+  visibleRange,
+  type WindowRange,
+} from './core/virtualLog';
 import type { FlashService } from './serial/flashService';
 import { createFlashService } from './serial/flashService';
 import { isWebSerialSupported, requestSerialPort } from './serial/portManager';
@@ -61,6 +74,7 @@ interface Elements {
   copyLogBtn: HTMLButtonElement | null;
   askAiLogBtn: HTMLButtonElement | null;
   askAiLogMenu: HTMLElement | null;
+  scrollBottomBtn: HTMLButtonElement | null;
 }
 
 function byId(id: string): HTMLElement | null {
@@ -99,13 +113,45 @@ function loadElements(): Elements {
     copyLogBtn: byId('copy-log-btn') as HTMLButtonElement | null,
     askAiLogBtn: byId('ask-ai-log-btn') as HTMLButtonElement | null,
     askAiLogMenu: byId('ask-ai-log-menu'),
+    scrollBottomBtn: byId('scroll-bottom-btn') as HTMLButtonElement | null,
   };
 }
 
 const el = loadElements();
 const machine = createFlashStateMachine();
-const logBuffer = createLogBuffer({ max: 500 });
+const logBuffer = createLogBuffer({ max: 100000 });
 const terminal = createLoaderTerminal(logBuffer);
+
+/** 距日志底部多少像素视为已到底部（自动回底触发阈值）。 */
+const SCROLL_NEAR_BOTTOM_THRESHOLD = 24;
+/** 用户是否停留在日志底部：在底部时新日志自动回底，离开后保持视点不动。 */
+let stickToBottom = true;
+/** 已渲染到日志视图的完整日志快照；null 表示尚未渲染（用于增量对齐）。 */
+let renderedEntries: readonly LogEntry[] | null = null;
+
+// ---- 虚拟滚动参数与状态 ----
+/** 可见窗口外上下各多渲染的行数（缓冲快速滚动）。 */
+const LOG_VIRTUAL_OVERSCAN = 5;
+/** 选区跨屏时渲染窗口的最大行数上限。 */
+const MAX_SELECTION_ROWS = 5000;
+/** 「复制」最多导出的行数（日志过多时只复制最近 N 行）。 */
+const COPY_MAX_LINES = 10000;
+/** 残留 stub 检测只扫描的最近行数。 */
+const LOG_TAIL_SCAN = 2000;
+/** 未测量行的预估行高（12.5px × 1.6 行高）。 */
+const DEFAULT_ROW_HEIGHT = 20;
+
+const virtualState = createVirtualLogState(DEFAULT_ROW_HEIGHT);
+/** entry → 行节点映射：复用节点对象，保证滚动重渲染后选区锚点存活。 */
+const rowNodes = new Map<LogEntry, HTMLDivElement>();
+/** 虚拟滚动占位容器（.log-virtual）。 */
+let logVirtual: HTMLDivElement | null = null;
+/** 选区覆盖的行号区间；null 表示无选区。 */
+let selectionRows: WindowRange | null = null;
+/** scroll 事件 rAF 节流 id。 */
+let scrollRafId: number | undefined;
+/** 行高测量函数（测试可注入，happy-dom 的 offsetHeight 恒为 0）。 */
+let measureRowHeight: (row: HTMLElement) => number = (row) => row.offsetHeight;
 
 /** 当前已选择的固件数据。 */
 let firmwareData: Uint8Array | null = null;
@@ -164,21 +210,200 @@ if (!isWebSerialSupported()) {
   }
 }
 
-// ---- 日志渲染（烧录操作 + 开发板输出合并，防抖渲染）----
+// ---- 日志渲染（烧录操作 + 开发板输出合并，防抖 + 增量渲染）----
+/** 构造一条日志的 DOM 节点（虚拟滚动行）。 */
+function buildLogNode(entry: LogEntry): HTMLDivElement {
+  const node = document.createElement('div');
+  node.textContent = formatLogEntry(entry);
+  node.className = `log-row log-line log-${entry.level} log-${entry.type}`;
+  return node;
+}
+
+// 虚拟滚动占位容器：撑起滚动高度，行节点在其中绝对定位
+if (el.logView !== null) {
+  logVirtual = document.createElement('div');
+  logVirtual.className = 'log-virtual';
+  el.logView.appendChild(logVirtual);
+}
+
+/** 定位选区端点到行号；不在行内返回 null。 */
+function rowIndexOf(node: Node | null): number | null {
+  let current = node instanceof Element ? node : (node?.parentElement ?? null);
+  while (current !== null && current !== el.logView) {
+    if (current.classList.contains('log-row')) {
+      const index = Number((current as HTMLElement).dataset.index);
+      return Number.isFinite(index) ? index : null;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+/** 渲染当前可见窗口（含选区扩展范围）：复用节点对象、只移动不重建。 */
+function renderWindow(): void {
+  if (el.logView === null || logVirtual === null) {
+    return;
+  }
+  const lines = logBuffer.lines();
+  const n = lines.length;
+  if (n === 0) {
+    return;
+  }
+  const vis = visibleRange(
+    virtualState,
+    el.logView.scrollTop,
+    el.logView.clientHeight,
+    LOG_VIRTUAL_OVERSCAN
+  );
+  let start = vis.start;
+  let end = vis.end;
+  if (selectionRows !== null) {
+    const merged = unionWithSelection(vis, selectionRows, MAX_SELECTION_ROWS);
+    start = merged.start;
+    end = merged.end;
+  }
+  // 移除窗口外的节点
+  for (const [entry, node] of rowNodes) {
+    const index = Number(node.dataset.index ?? '0');
+    if (index < start || index > end) {
+      node.remove();
+      rowNodes.delete(entry);
+    }
+  }
+  // 增量创建缺失节点并保持 DOM 升序插入。
+  // 关键：不移动窗口内已存在的节点，避免选区锚点脱离文档导致浏览器重置选区（拖动选择错乱）。
+  const fresh: Array<{ node: HTMLDivElement; index: number }> = [];
+  for (let i = start; i <= end && i < n; i++) {
+    const entry = lines[i];
+    if (entry === undefined || rowNodes.has(entry)) {
+      continue;
+    }
+    const node = buildLogNode(entry);
+    rowNodes.set(entry, node);
+    node.dataset.index = String(i);
+    node.style.top = `${rowTop(virtualState, i)}px`;
+    fresh.push({ node, index: i });
+  }
+  if (fresh.length > 0) {
+    // absolute 定位不影响视觉，但选区文本顺序依赖 DOM 升序，故按 data-index 找插入位置
+    const children = logVirtual.children;
+    for (const item of fresh) {
+      let insertBefore: Element | null = null;
+      for (const child of children) {
+        if (Number((child as HTMLElement).dataset.index ?? '0') > item.index) {
+          insertBefore = child;
+          break;
+        }
+      }
+      logVirtual.insertBefore(item.node, insertBefore);
+    }
+  }
+  // 测量新增节点并校正行高
+  const measurements: RowMeasurement[] = [];
+  for (const item of fresh) {
+    measurements.push({ index: item.index, height: Math.max(1, measureRowHeight(item.node)) });
+  }
+  applyMeasurements(virtualState, measurements);
+  // 校正后按最新偏移重定位窗口内节点（仅改 top，不移动节点）
+  for (const node of rowNodes.values()) {
+    const index = Number(node.dataset.index ?? '0');
+    if (index >= start && index <= end) {
+      node.style.top = `${rowTop(virtualState, index)}px`;
+    }
+  }
+  // 更新占位高度（scrollHeight 依赖它），回底时滚动到底
+  logVirtual.style.height = `${virtualState.totalHeight}px`;
+  if (stickToBottom) {
+    el.logView.scrollTop = el.logView.scrollHeight;
+  }
+}
+
+/** 按渲染计划更新虚拟列表；用户离开底部时保持视点不动。 */
 function renderLogView(): void {
   if (el.logView === null) {
     return;
   }
   const lines = logBuffer.lines();
-  const fragment = document.createDocumentFragment();
-  for (const entry of lines) {
-    const node = document.createElement('div');
-    node.textContent = formatLogEntry(entry);
-    node.className = `log-line log-${entry.level} log-${entry.type}`;
-    fragment.appendChild(node);
+  const plan = planLogRender({ renderedEntries }, lines);
+
+  if (plan.action === 'clear') {
+    for (const node of rowNodes.values()) {
+      node.remove();
+    }
+    rowNodes.clear();
+    logVirtual?.replaceChildren();
+    virtualState.heights.length = 0;
+    virtualState.offsets.length = 1;
+    virtualState.offsets[0] = 0;
+    virtualState.totalHeight = 0;
+    if (logVirtual !== null) {
+      logVirtual.style.height = '0px';
+    }
+    renderedEntries = null;
+    stickToBottom = true;
+    selectionRows = null;
+  } else if (plan.action === 'rebuild') {
+    // 首次渲染或异常兜底：重建高度数组（DOM 只有可见行，重建便宜）
+    for (const node of rowNodes.values()) {
+      node.remove();
+    }
+    rowNodes.clear();
+    virtualState.heights.length = 0;
+    virtualState.offsets.length = 1;
+    virtualState.offsets[0] = 0;
+    virtualState.totalHeight = 0;
+    appendHeights(virtualState, lines.length);
+    renderedEntries = lines;
+    renderWindow();
+  } else if (plan.action === 'adjust') {
+    // 环形缓冲裁掉头部：裁剪高度并平移已渲染节点行号，再追加新行高度
+    const removed = trimHead(virtualState, plan.removeFromHead);
+    for (const node of rowNodes.values()) {
+      node.dataset.index = String(Number(node.dataset.index ?? '0') - plan.removeFromHead);
+    }
+    appendHeights(virtualState, plan.to - plan.appendFrom);
+    renderedEntries = lines;
+    if (selectionRows !== null) {
+      const s = selectionRows.start - plan.removeFromHead;
+      const e = selectionRows.end - plan.removeFromHead;
+      selectionRows = e < 0 ? null : { start: Math.max(0, s), end: Math.max(0, e) };
+    }
+    if (!stickToBottom) {
+      el.logView.scrollTop = Math.max(0, el.logView.scrollTop - removed);
+    }
+    renderWindow();
   }
-  el.logView.replaceChildren(fragment);
-  el.logView.scrollTop = el.logView.scrollHeight;
+  // noop：日志无变化，不触碰 DOM 与滚动位置
+  updateScrollBottomButton();
+}
+
+/** 刷新「回到底部」按钮显隐：在底部隐藏，离开底部显示。 */
+function updateScrollBottomButton(): void {
+  if (el.scrollBottomBtn === null) {
+    return;
+  }
+  el.scrollBottomBtn.hidden = stickToBottom;
+}
+
+/** 滚动事件：重算用户是否停留在日志底部，并 rAF 节流重渲染窗口。 */
+function onLogScroll(): void {
+  if (el.logView === null) {
+    return;
+  }
+  stickToBottom = isNearBottom(
+    el.logView.scrollHeight,
+    el.logView.scrollTop,
+    el.logView.clientHeight,
+    SCROLL_NEAR_BOTTOM_THRESHOLD
+  );
+  updateScrollBottomButton();
+  if (scrollRafId !== undefined) {
+    return;
+  }
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = undefined;
+    renderWindow();
+  });
 }
 
 let logRenderTimer: number | undefined;
@@ -190,6 +415,20 @@ logBuffer.subscribe(() => {
     logRenderTimer = undefined;
     renderLogView();
   }, 30);
+});
+
+el.logView?.addEventListener('scroll', onLogScroll);
+el.scrollBottomBtn?.addEventListener('click', () => {
+  stickToBottom = true;
+  if (el.logView !== null) {
+    el.logView.scrollTop = el.logView.scrollHeight; // 瞬时跳转，程序赋值触发 scroll 事件，逻辑闭环
+  }
+  updateScrollBottomButton();
+});
+
+// 容器尺寸变化（窗口缩放/布局改变）时重渲染窗口
+window.addEventListener('resize', () => {
+  renderWindow();
 });
 
 el.clearLogBtn?.addEventListener('click', () => {
@@ -213,22 +452,34 @@ function appendConsoleLine(text: string): void {
 }
 
 // ---- 复制 / 问 AI ----
-function flashLogText(): string {
-  return logBuffer.lines().map(formatLogEntry).join('\n');
+/** 「复制」文本：日志过多时只取最近 N 行，并在开头提示已截取。 */
+function copyLogText(): string {
+  const lines = logBuffer.lines();
+  const { text, lineCount } = formatLogTail(lines, { maxLines: COPY_MAX_LINES });
+  if (lineCount < lines.length) {
+    return `…（日志过长，已复制最近 ${lineCount} 行）…\n${text}`;
+  }
+  return text;
+}
+
+/** 「问 AI」文本：只取日志末尾足够字符数，避免对 10 万行全量 join。 */
+function askAiLogText(): string {
+  return formatLogTail(logBuffer.lines(), { maxChars: ASK_AI_MAX_CHARS }).text;
 }
 
 interface LogActionsOptions {
   copyBtn: HTMLButtonElement | null;
   askBtn: HTMLButtonElement | null;
   menu: HTMLElement | null;
-  getLogText: () => string;
+  getCopyText: () => string;
+  getAskText: () => string;
   logType: string;
 }
 
 /** 为一个日志面板装配「复制」与「问 AI」下拉。 */
 function setupLogActions(options: LogActionsOptions): void {
   options.copyBtn?.addEventListener('click', async () => {
-    const text = options.getLogText();
+    const text = options.getCopyText();
     if (text === '') {
       return;
     }
@@ -264,7 +515,7 @@ function setupLogActions(options: LogActionsOptions): void {
     if (provider === undefined) {
       return;
     }
-    const logContent = truncateLog(options.getLogText(), ASK_AI_MAX_CHARS);
+    const logContent = truncateLog(options.getAskText(), ASK_AI_MAX_CHARS);
     const context = buildDeviceContext(detectResult, options.logType, consoleBaud);
     const prompt = buildAskAiPrompt(context, logContent);
     window.open(buildAskAiUrl(provider, prompt), '_blank', 'noopener');
@@ -278,7 +529,8 @@ setupLogActions({
   copyBtn: el.copyLogBtn,
   askBtn: el.askAiLogBtn,
   menu: el.askAiLogMenu,
-  getLogText: flashLogText,
+  getCopyText: copyLogText,
+  getAskText: askAiLogText,
   logType: '日志',
 });
 
@@ -305,12 +557,31 @@ let pointerPos: { x: number; y: number } | null = null;
 const SELECTION_TOOLBAR_EST_WIDTH = 150;
 
 function updateSelectionToolbar(): void {
-  const text = selectionTextInside(window.getSelection(), el.logView);
+  const sel = window.getSelection();
+  const text = selectionTextInside(sel, el.logView);
   if (text === '' || el.selectionToolbar === null) {
+    if (selectionRows !== null) {
+      selectionRows = null;
+      renderWindow();
+    }
     hideSelectionToolbar();
     return;
   }
-  const range = window.getSelection()?.getRangeAt(0);
+  // 扩展渲染窗口覆盖跨屏选区，保证选区文本完整可读
+  const a = sel !== null ? rowIndexOf(sel.anchorNode) : null;
+  const b = sel !== null ? rowIndexOf(sel.focusNode) : null;
+  const next = a !== null && b !== null ? { start: Math.min(a, b), end: Math.max(a, b) } : null;
+  if (
+    next !== null &&
+    (selectionRows === null || next.start !== selectionRows.start || next.end !== selectionRows.end)
+  ) {
+    selectionRows = next;
+    renderWindow();
+  } else if (next === null && selectionRows !== null) {
+    selectionRows = null;
+    renderWindow();
+  }
+  const range = sel?.getRangeAt(0);
   const rect = range?.getBoundingClientRect();
   if (pointerPos !== null) {
     // 贴近鼠标：右下偏移，且不超出视口
@@ -395,7 +666,7 @@ function canFlash(): boolean {
 
 /** 判断本次连接是否复用了残留的软件加载器（stub），可能导致烧录失败。 */
 function isStaleStubUsed(): boolean {
-  return logBuffer.lines().some((entry) => entry.text.includes('Stub is already running'));
+  return hasTailText(logBuffer.lines(), 'Stub is already running', LOG_TAIL_SCAN);
 }
 
 function setProgressVisible(visible: boolean): void {
@@ -795,3 +1066,13 @@ el.resetDeviceBtn?.addEventListener('click', async () => {
 
 renderUi();
 logBuffer.push('info', 'Flashy 已就绪，请连接设备并选择固件开始烧录');
+
+/** 测试钩子（main.ts 在 coverage.exclude 中）：暴露日志缓冲供冒烟测试写入。 */
+export function __getLogBufferForTests(): LogBuffer {
+  return logBuffer;
+}
+
+/** 测试钩子：注入行高测量函数（happy-dom 的 offsetHeight 恒为 0）。 */
+export function __setMeasureRowHeightForTests(fn: (row: HTMLElement) => number): void {
+  measureRowHeight = fn;
+}
