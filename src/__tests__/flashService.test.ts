@@ -1,20 +1,20 @@
-import type { FlashOptions, IEspLoaderTerminal } from 'esptool-js';
+import type { FlashOptions, IEspLoaderTerminal, SerialOptions } from 'esptool-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   class MockTransport {
     static instances: MockTransport[] = [];
+    /** rawRead 回调输出的数据（默认含 ROM 启动日志，用于触发启动检测）。 */
+    static rawData: Uint8Array = new TextEncoder().encode(
+      'ESP-ROM:esp32s3-20210327\r\nrst:0x15 (RTC_SW_SYS_RST)\r\nwaiting for download\r\n'
+    );
     device: SerialPort;
-    connect = vi.fn<() => Promise<void>>(async () => {});
-    setDTR = vi.fn<() => Promise<void>>(async () => {});
-    setRTS = vi.fn<() => Promise<void>>(async () => {});
+    connect = vi.fn<(baud: number, options?: SerialOptions) => Promise<void>>(async () => {});
+    setDTR = vi.fn<(state: boolean) => Promise<void>>(async () => {});
+    setRTS = vi.fn<(state: boolean) => Promise<void>>(async () => {});
     disconnect = vi.fn<() => Promise<void>>(async () => {});
     rawRead = vi.fn(async (onData: (data: Uint8Array) => void) => {
-      onData(
-        new TextEncoder().encode(
-          'ESP-ROM:esp32s3-20210327\r\nrst:0x15 (RTC_SW_SYS_RST)\r\nwaiting for download\r\n'
-        )
-      );
+      onData(MockTransport.rawData);
     });
     constructor(device: SerialPort) {
       this.device = device;
@@ -67,6 +67,9 @@ const port = {} as SerialPort;
 
 beforeEach(() => {
   mocks.MockTransport.instances.length = 0;
+  mocks.MockTransport.rawData = new TextEncoder().encode(
+    'ESP-ROM:esp32s3-20210327\r\nrst:0x15 (RTC_SW_SYS_RST)\r\nwaiting for download\r\n'
+  );
   mocks.MockESPLoader.instances.length = 0;
   mocks.MockESPLoader.mainErrorQueue = [];
   mocks.MockESPLoader.nextFlashSizeError = null;
@@ -187,10 +190,31 @@ describe('createFlashService', () => {
     const service = createFlashService(port, 115200, makeTerminal());
     await service.detect();
     await service.finish();
-    const transport = mocks.MockTransport.instances[0];
-    expect(transport?.setDTR).toHaveBeenCalled();
-    expect(transport?.setRTS).toHaveBeenCalled();
-    expect(transport?.disconnect).toHaveBeenCalledTimes(1);
+    // finish() 先断开 esploader 连接，再以新 Transport 复位到应用并检测启动日志
+    const esploaderTransport = mocks.MockTransport.instances[0];
+    const resetTransport = mocks.MockTransport.instances[1];
+    expect(resetTransport?.setDTR).toHaveBeenCalled();
+    expect(resetTransport?.setRTS).toHaveBeenCalled();
+    expect(esploaderTransport?.disconnect).toHaveBeenCalledTimes(1);
+    expect(resetTransport?.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry the reset when no boot log is detected', async () => {
+    vi.useFakeTimers();
+    try {
+      // rawRead 只产生非启动日志 → booted 恒 false → 触发全部重试
+      mocks.MockTransport.rawData = new TextEncoder().encode('nothing to see here\r\n');
+      const service = createFlashService(port, 115200, makeTerminal());
+      const monitorPromise = service.monitor({ consoleBaud: 115200, onConsoleData: vi.fn() });
+      // 3 次复位：每次 hardResetPulse(100+50+300ms) + 检测窗口(1500ms)
+      await vi.advanceTimersByTimeAsync(7000);
+      await monitorPromise;
+      const t = mocks.MockTransport.instances[0];
+      // hardResetPulse 每次调用 setRTS(true) 与 setRTS(false)，3 次共 6 次
+      expect(t?.setRTS.mock.calls.length).toBe(6);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should reset the device and start console monitoring via physical pulse', async () => {
@@ -244,6 +268,26 @@ describe('createFlashService', () => {
     expect(onConsoleData).toHaveBeenCalledWith(expect.stringContaining('ESP-ROM'));
     // 监控期间保持连接
     expect(monitorTransport?.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('should open the serial port with flowControl none for monitoring', async () => {
+    const service = createFlashService(port, 115200, makeTerminal());
+    await service.monitor({ consoleBaud: 115200, onConsoleData: vi.fn() });
+    const monitorTransport = mocks.MockTransport.instances[0];
+    expect(monitorTransport?.connect).toHaveBeenCalledWith(115200, { flowControl: 'none' });
+  });
+
+  it('should apply the DTR+RTS reset pulse in order and read before resetting', async () => {
+    const service = createFlashService(port, 115200, makeTerminal());
+    await service.monitor({ consoleBaud: 115200, onConsoleData: vi.fn() });
+    const t = mocks.MockTransport.instances[0];
+    // 复位序列：显式 DTR true → RTS true → DTR false → RTS false（兼容 CH343）
+    expect(t?.setDTR.mock.calls.map((c) => c[0])).toEqual([true, false]);
+    expect(t?.setRTS.mock.calls.map((c) => c[0])).toEqual([true, false]);
+    // 先启动读循环，再执行复位脉冲（rawRead 早于首次 setRTS）
+    const rawReadOrder = t?.rawRead.mock.invocationCallOrder[0] ?? 0;
+    const rtsOrder = t?.setRTS.mock.invocationCallOrder[0] ?? 0;
+    expect(rawReadOrder).toBeLessThan(rtsOrder);
   });
 
   it('should stop the serial monitor on abort', async () => {

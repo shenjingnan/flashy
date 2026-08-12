@@ -6,6 +6,23 @@ import type { BaudRate, BaudSelection, DetectResult, ProgressInfo } from '../cor
 /** 无法检测 Flash 大小时使用的兜底值（足够大以避免误拒绝合法固件）。 */
 const FALLBACK_FLASH_SIZE = '64MB';
 
+/** 物理复位脉冲时序（毫秒）：EN 低保持 / DTR 释放后稳定 / EN 释放后等待芯片启动。 */
+const RESET_HOLD_MS = 100;
+const DTR_SETTLE_MS = 50;
+const RESET_RELEASE_MS = 300;
+
+/** 复位重试次数：CH343 等桥接芯片经 Web Serial 控制线传递存在偶发失败，重试提高成功率。 */
+const RESET_RETRY = 3;
+/** 每次复位后等待启动日志检测的时长（毫秒）。 */
+const BOOT_DETECT_MS = 1500;
+/** ROM 启动日志特征（复位成功即打印，如 rst:0x / boot:0x / ESP-ROM / ets）。 */
+const BOOT_LOG_RE = /rst:0x|boot:0x|ESP-ROM|ets /;
+
+/** 判断一段串口文本是否为复位后的 ROM 启动日志。 */
+function isBootLog(text: string): boolean {
+  return BOOT_LOG_RE.test(text);
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 烧录请求参数。 */
@@ -145,38 +162,54 @@ export function createFlashService(
   }
 
   /**
-   * 物理复位脉冲：GPIO0 拉高 → 正常启动固件；EN 拉低再拉高 → 复位芯片（等效 RST 键）。
-   * 与 esptool-js ClassicReset 的 RTS→EN 复位机制一致（本板已验证 RTS→EN 有效）。
+   * 物理复位脉冲：显式翻转 DTR 制造控制线状态变化，EN 低保持一段时间，
+   * 释放 DTR（GPIO0 拉高 → 正常启动），再释放 EN 复位芯片（等效 RST 键）。
+   *
+   * 相比纯 RTS 脉冲（仅 EN 动作），此序列在复位期间显式翻转 DTR，兼容 CH343 等
+   * 桥接芯片经 Web Serial 传递控制线时的差异（实测纯 RTS 脉冲在 CH343 上无法把
+   * 芯片复位到应用，芯片停在下载模式；DTR+RTS 组合在烧录路径上已验证有效）。
+   * 与 esptool-js ClassicReset 的 DTR+RTS 复位机制一致（本板已验证 RTS→EN 有效）。
    */
-  async function resetPulse(t: Transport): Promise<void> {
+  async function hardResetPulse(t: Transport): Promise<void> {
     try {
-      await t.setDTR(false); // GPIO0 高 → 正常启动
+      await t.setDTR(true); // GPIO0 低（制造 DTR 状态变化）
       await t.setRTS(true); // EN 低 → 芯片复位
-      await sleep(200);
+      await sleep(RESET_HOLD_MS);
+      await t.setDTR(false); // GPIO0 高 → 正常启动
+      await sleep(DTR_SETTLE_MS); // 等 GPIO0 稳定为高
       await t.setRTS(false); // EN 高 → 芯片启动
-      await sleep(300);
+      await sleep(RESET_RELEASE_MS); // 等芯片输出启动日志
     } catch {
       // 复位失败不影响后续流程
     }
   }
 
   async function finish(): Promise<void> {
-    if (transport !== undefined) {
-      // 复位芯片运行新固件（物理 RTS 脉冲，不依赖 esptool-js 的假复位）
-      await resetPulse(transport);
-      await transport.disconnect().catch(() => {});
+    try {
+      // 烧录后以新连接复位到应用并检测启动日志，
+      // 规避 CH343 上复位偶发失败导致新固件不自动运行的问题
+      await connectAndResetToApp(115200, () => {});
+    } catch {
+      // 复位失败不影响后续流程
     }
+    await transport?.disconnect().catch(() => {});
     transport = undefined;
     esploader = undefined;
   }
 
   /**
-   * 复位设备（等效按下开发板 RST 键）并保持串口打开，持续读取开发板日志。
-   * 不使用 esptool-js 的 after('hard_reset')——其 HardReset 只执行 setRTS(false)，
-   * 不产生复位脉冲，属于"假复位"。
-   * 监控会持续运行，直到调用 abort() 断开串口。
+   * 复位芯片到应用并持续监控输出。
+   *
+   * 断开旧连接后重新打开串口，先启动读循环再执行复位脉冲；
+   * 复位可能偶发失败（CH343 等桥接芯片经 Web Serial 控制线传递不稳定），
+   * 与 esptool-js 一致采用"复位 + 检测启动日志"重试，直到检测到 ROM 启动日志。
+   *
+   * @returns 是否在重试窗口内检测到启动日志（未检测到也可能已复位成功）。
    */
-  async function reset(options: ResetOptions): Promise<void> {
+  async function connectAndResetToApp(
+    consoleBaud: number,
+    onConsoleData: (text: string) => void
+  ): Promise<boolean> {
     if (transport !== undefined) {
       await transport.disconnect().catch(() => {});
       transport = undefined;
@@ -184,60 +217,55 @@ export function createFlashService(
     }
     const t = new Transport(port, true);
     transport = t;
+    let booted = false;
     try {
-      await t.connect(options.consoleBaud);
-      await resetPulse(t);
-      // 持续读取开发板串口输出，解码后回调；由 abort() 断开时终止
+      await t.connect(consoleBaud, { flowControl: 'none' });
+      // 先启动读循环再复位：保证复位后的启动日志被实时读到，避免依赖驱动侧缓冲
       const decoder = new TextDecoder();
       void t
         .rawRead(
           (data: Uint8Array) => {
-            options.onConsoleData(decoder.decode(data, { stream: true }));
+            const text = decoder.decode(data, { stream: true });
+            if (!booted && isBootLog(text)) {
+              booted = true;
+            }
+            onConsoleData(text);
           },
           () => false
         )
         .catch(() => {});
+      for (let i = 0; i < RESET_RETRY; i++) {
+        await hardResetPulse(t);
+        const deadline = Date.now() + BOOT_DETECT_MS;
+        while (Date.now() < deadline && !booted) {
+          await sleep(100);
+        }
+        if (booted) {
+          break;
+        }
+      }
     } catch (err) {
       transport = undefined;
       await t.disconnect().catch(() => {});
       throw err;
     }
+    return booted;
+  }
+
+  async function reset(options: ResetOptions): Promise<void> {
+    await connectAndResetToApp(options.consoleBaud, options.onConsoleData);
   }
 
   /** 串口监控：复位设备（等效 RST 键）后持续读取开发板输出。 */
   async function monitor(options: MonitorOptions): Promise<void> {
-    if (transport !== undefined) {
-      await transport.disconnect().catch(() => {});
-      transport = undefined;
-      esploader = undefined;
-    }
-    const t = new Transport(port, true);
-    transport = t;
-    try {
-      await t.connect(options.consoleBaud);
-      await resetPulse(t);
-      // 持续读取开发板串口输出，解码后回调；由 abort() 断开时终止
-      const decoder = new TextDecoder();
-      void t
-        .rawRead(
-          (data: Uint8Array) => {
-            options.onConsoleData(decoder.decode(data, { stream: true }));
-          },
-          () => false
-        )
-        .catch(() => {});
-    } catch (err) {
-      transport = undefined;
-      await t.disconnect().catch(() => {});
-      throw err;
-    }
+    await connectAndResetToApp(options.consoleBaud, options.onConsoleData);
   }
 
   async function abort(): Promise<void> {
     if (transport !== undefined) {
       if (esploader !== undefined) {
         // 烧录失败路径：先复位清除残留的 stub
-        await resetPulse(transport);
+        await hardResetPulse(transport);
       }
       // 监控会话直接断开即可终止 rawRead
       await transport.disconnect().catch(() => {});
