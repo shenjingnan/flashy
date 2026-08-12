@@ -143,8 +143,8 @@ describe('main.ts 冒烟测试', () => {
     );
     await import('../main');
     const fileInput = document.getElementById('file-input') as HTMLInputElement | null;
-    const selectBtn = document.querySelector<HTMLButtonElement>('.builtin-item .btn-tiny');
-    selectBtn?.click();
+    const builtinItem = document.querySelector<HTMLElement>('.builtin-item');
+    builtinItem?.click();
     await vi.waitFor(() => {
       expect(document.getElementById('file-info')?.textContent).toContain('4 B');
     });

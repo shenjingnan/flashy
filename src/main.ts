@@ -484,6 +484,9 @@ function renderBuiltinList(): void {
   for (const firmware of BUILTIN_FIRMWARES) {
     const item = document.createElement('li');
     item.className = 'builtin-item';
+    item.addEventListener('click', () => {
+      void selectBuiltinFirmware(firmware);
+    });
 
     const meta = document.createElement('div');
     meta.className = 'builtin-meta';
@@ -498,15 +501,7 @@ function renderBuiltinList(): void {
       meta.appendChild(desc);
     }
 
-    const selectBtn = document.createElement('button');
-    selectBtn.type = 'button';
-    selectBtn.className = 'btn btn-tiny';
-    selectBtn.textContent = '选择';
-    selectBtn.addEventListener('click', () => {
-      void selectBuiltinFirmware(firmware);
-    });
-
-    item.append(meta, selectBtn);
+    item.append(meta);
     fragment.appendChild(item);
   }
   el.builtinList.replaceChildren(fragment);

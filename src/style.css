@@ -594,12 +594,21 @@ input[type="file"]::file-selector-button {
 .builtin-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   background: var(--terminal-bg);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.builtin-item:hover {
+  border-color: var(--accent);
+  background-color: rgba(59, 130, 246, 0.08);
 }
 
 .builtin-meta {
