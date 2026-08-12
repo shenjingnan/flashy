@@ -22,9 +22,40 @@
         </h1>
         <span class="app-subtitle">ESP32 固件烧录工具</span>
       </div>
-      <div class="app-status">
-        <span id="chip-badge" class="chip-badge" data-state="idle">未连接</span>
-        <span id="version" class="app-version"></span>
+      <div class="app-header-right">
+        <nav class="header-links" aria-label="社交链接">
+          <a
+            class="header-link"
+            href="https://qm.qq.com/q/izhxMp7Rlu"
+            target="_blank"
+            rel="noopener"
+            title="加入 QQ 群：闪电蘑菇粉丝群"
+          >
+            <img src="/qq.svg" alt="加入 QQ 群" />
+          </a>
+          <a
+            class="header-link"
+            href="https://space.bilibili.com/24615859"
+            target="_blank"
+            rel="noopener"
+            title="Bilibili 主页：闪电蘑菇"
+          >
+            <img src="/bilibili.svg" alt="Bilibili 主页" />
+          </a>
+          <a
+            class="header-link"
+            href="https://github.com/shenjingnan/flashy"
+            target="_blank"
+            rel="noopener"
+            title="GitHub 仓库：flashy"
+          >
+            <img src="/github.svg" alt="GitHub 仓库" />
+          </a>
+        </nav>
+        <div class="app-status">
+          <span id="chip-badge" class="chip-badge" data-state="idle">未连接</span>
+          <span id="version" class="app-version"></span>
+        </div>
       </div>
     </header>
 
@@ -121,26 +152,6 @@
           <button id="builtin-close" type="button" class="btn btn-tiny" aria-label="关闭">✕</button>
         </div>
         <ul id="builtin-list" class="builtin-list"></ul>
-      </div>
-    </div>
-
-    <div id="follow-modal" class="builtin-modal">
-      <div class="builtin-modal-box">
-        <div class="builtin-modal-header">
-          <span>求关注</span>
-          <button id="follow-close" type="button" class="btn btn-tiny" aria-label="关闭">✕</button>
-        </div>
-        <div class="follow-modal-body">
-          <p>
-            使用烧录功能前，请先关注 UP 主
-            <strong id="follow-author-name">闪电蘑菇</strong>。
-            关注后返回本页，再点击「开始烧录」即可继续。
-          </p>
-          <div class="btn-row">
-            <button id="follow-go" type="button" class="btn btn-primary">去关注（打开主页）</button>
-            <button id="follow-later" type="button" class="btn btn-ghost">稍后再说</button>
-          </div>
-        </div>
       </div>
     </div>
 
