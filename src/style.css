@@ -71,6 +71,42 @@ body {
   font-size: 13px;
 }
 
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.header-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.header-link img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.header-link:hover {
+  background: var(--panel-border);
+}
+
+.header-link:hover img {
+  filter: brightness(1.35);
+}
+
 .app-status {
   display: flex;
   align-items: center;
@@ -581,26 +617,6 @@ input[type="file"]::file-selector-button {
 .builtin-desc {
   font-size: 12px;
   color: var(--text-dim);
-}
-
-/* ---- 关注引导 ---- */
-.follow-modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.follow-modal-body p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text);
-}
-
-.follow-modal-body .btn-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 /* ---- 响应式 ---- */

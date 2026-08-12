@@ -7,7 +7,6 @@ import {
   buildDeviceContext,
   truncateLog,
 } from './core/askAi';
-import { AUTHOR_SPACE_URL, AUTHOR_UID, checkFollowing } from './core/authorGate';
 import {
   BAUD_RATES,
   CONSOLE_BAUD_RATES,
@@ -44,11 +43,6 @@ interface Elements {
   builtinModal: HTMLElement | null;
   builtinClose: HTMLButtonElement | null;
   builtinList: HTMLUListElement | null;
-  followModal: HTMLElement | null;
-  followClose: HTMLButtonElement | null;
-  followGo: HTMLButtonElement | null;
-  followLater: HTMLButtonElement | null;
-  followAuthorName: HTMLElement | null;
   baudSelect: HTMLSelectElement | null;
   addressInput: HTMLInputElement | null;
   flashBtn: HTMLButtonElement | null;
@@ -87,11 +81,6 @@ function loadElements(): Elements {
     builtinModal: byId('builtin-modal'),
     builtinClose: byId('builtin-close') as HTMLButtonElement | null,
     builtinList: byId('builtin-list') as HTMLUListElement | null,
-    followModal: byId('follow-modal'),
-    followClose: byId('follow-close') as HTMLButtonElement | null,
-    followGo: byId('follow-go') as HTMLButtonElement | null,
-    followLater: byId('follow-later') as HTMLButtonElement | null,
-    followAuthorName: byId('follow-author-name'),
     baudSelect: byId('baud-select') as HTMLSelectElement | null,
     addressInput: byId('address-input') as HTMLInputElement | null,
     flashBtn: byId('flash-btn') as HTMLButtonElement | null,
@@ -591,49 +580,6 @@ el.builtinModal?.addEventListener('click', (event) => {
 
 renderBuiltinList();
 
-// ---- 关注引导 ----
-function openFollowModal(): void {
-  el.followModal?.classList.add('open');
-  // 尽力展示 UP 主昵称（fire-and-forget，失败保留占位文本）
-  if (window.toy !== undefined && el.followAuthorName !== null) {
-    void window.toy
-      .getAuthorProfile()
-      .then((resp) => {
-        if (resp.status === 'ok' && resp.data !== undefined && el.followAuthorName !== null) {
-          el.followAuthorName.textContent = resp.data.nickname;
-        }
-      })
-      .catch(() => {
-        // 忽略：保留占位文本「UP 主」
-      });
-  }
-}
-
-function closeFollowModal(): void {
-  el.followModal?.classList.remove('open');
-}
-
-el.followClose?.addEventListener('click', closeFollowModal);
-el.followLater?.addEventListener('click', closeFollowModal);
-el.followModal?.addEventListener('click', (event) => {
-  if (event.target === el.followModal) {
-    closeFollowModal(); // 点击遮罩层关闭
-  }
-});
-
-// 去关注：站内跳转到 UP 主主页（navigate 必须在用户手势内调用），不可用时兜底打开主页 URL
-el.followGo?.addEventListener('click', async () => {
-  try {
-    if (window.toy !== undefined && (await window.toy.isSupport('navigate'))) {
-      await window.toy.navigate({ type: 'space', id: AUTHOR_UID });
-    } else {
-      window.open(AUTHOR_SPACE_URL, '_blank', 'noopener');
-    }
-  } catch {
-    window.open(AUTHOR_SPACE_URL, '_blank', 'noopener');
-  }
-});
-
 // ---- 文件选择 ----
 el.fileBtn?.addEventListener('click', () => {
   el.fileInput?.click(); // 用户手势内同步触发文件选择器
@@ -751,15 +697,6 @@ el.monitorBtn?.addEventListener('click', async () => {
 el.flashBtn?.addEventListener('click', async () => {
   if (!canFlash() || service === null || firmwareData === null) {
     return;
-  }
-  // ---- 关注校验（仅 Toy 环境启用；未关注时拦截引导，其余放行）----
-  if (window.toy !== undefined) {
-    const result = await checkFollowing(window.toy);
-    if (result === 'not-followed') {
-      logBuffer.push('warn', '检测到尚未关注 UP 主，请先关注后再烧录');
-      openFollowModal();
-      return;
-    }
   }
   let address: number;
   try {
