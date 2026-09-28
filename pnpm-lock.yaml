@@ -13,8 +13,8 @@ importers:
   .:
     dependencies:
       esptool-js:
-        specifier: ^0.6.1
-        version: 0.6.1
+        specifier: ^0.7.0
+        version: 0.7.0
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.7
@@ -920,8 +920,8 @@ packages:
     engines: {node: '>=4'}
     hasBin: true
 
-  esptool-js@0.6.1:
-    resolution: {integrity: sha512-WNgQTfaEIgHyEiT56pI5v7Tq6Pzjc2XaibLxAtWY4v3zE2Ofk5ImkJY5foEUr0JrdkfHWf6rNizAewN4/kSpHw==}
+  esptool-js@0.7.0:
+    resolution: {integrity: sha512-9wHuW/s9t4Vs6HKcr3pra3gbRVWwaN0eabMWodWH4KEJHEYZxgmWwZ3s0F4xcWVCZOc/L98bGZ4uWoZvR8KBKA==}
 
   estree-walker@3.0.3:
     resolution: {integrity: sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g==}
@@ -1292,9 +1292,6 @@ packages:
   tinyspy@4.0.4:
     resolution: {integrity: sha512-azl+t0z7pw/z958Gy9svOTuzqIk6xq+NSheJzn5MMWtWTFywIacg2wUlzKFGtt3cthx0r2SxMK0yzJOR0IES7Q==}
     engines: {node: '>=14.0.0'}
-
-  tslib@2.8.1:
-    resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
   typescript@6.0.3:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
@@ -2187,11 +2184,10 @@ snapshots:
 
   esprima@4.0.1: {}
 
-  esptool-js@0.6.1:
+  esptool-js@0.7.0:
     dependencies:
       atob-lite: 2.0.0
       pako: 2.2.0
-      tslib: 2.8.1
 
   estree-walker@3.0.3:
     dependencies:
@@ -2528,8 +2524,6 @@ snapshots:
   tinyrainbow@2.0.0: {}
 
   tinyspy@4.0.4: {}
-
-  tslib@2.8.1: {}
 
   typescript@6.0.3: {}
 
